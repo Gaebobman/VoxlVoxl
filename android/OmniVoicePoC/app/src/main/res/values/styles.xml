@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One place for the type ramp, so a screen never invents its own size. -->
+<resources>
+    <!-- Dotted style names inherit implicitly, so the family needs a root even
+         though it carries nothing of its own. -->
+    <style name="Voxl" />
+
+    <style name="Voxl.Wordmark">
+        <item name="android:textSize">17sp</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:letterSpacing">-0.018</item>
+    </style>
+
+    <style name="Voxl.Tag">
+        <item name="android:textSize">11sp</item>
+        <item name="android:textColor">@color/accent_light</item>
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+
+    <style name="Voxl.Title">
+        <item name="android:textSize">22sp</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:lineSpacingMultiplier">1.35</item>
+        <item name="android:letterSpacing">-0.018</item>
+    </style>
+
+    <style name="Voxl.Body">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/text_muted</item>
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="android:lineSpacingMultiplier">1.55</item>
+    </style>
+
+    <style name="Voxl.Caption">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/text_faint</item>
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="android:lineSpacingMultiplier">1.5</item>
+    </style>
+
+    <style name="Voxl.Label">
+        <item name="android:textSize">10sp</item>
+        <item name="android:textColor">@color/text_faint</item>
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+
+    <!-- Readouts use Pretendard's tabular figures so columns of numbers line up
+         without dragging in a second family. -->
+    <style name="Voxl.Readout">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/text_muted</item>
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+
+    <style name="Voxl.Readout.Value">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/text</item>
+    </style>
+
+    <style name="Voxl.Readout.Large">
+        <item name="android:textSize">34sp</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:letterSpacing">-0.03</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="Voxl.Readout.Huge">
+        <item name="android:textSize">46sp</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:letterSpacing">-0.04</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="Voxl.Button">
+        <item name="android:background">@drawable/amber_button</item>
+        <item name="android:textColor">@color/accent_ink</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="Voxl.Button.Rec">
+        <item name="android:background">@drawable/rec_button</item>
+    </style>
+
+    <style name="Voxl.Button.Ghost">
+        <item name="android:background">@drawable/glass_chip</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textFontWeight">500</item>
+    </style>
+
+    <style name="Voxl.Chip">
+        <item name="android:background">@drawable/glass_chip</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="android:paddingStart">15dp</item>
+        <item name="android:paddingEnd">15dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="Voxl.Field">
+        <item name="android:background">@drawable/text_field</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textColorHint">@color/text_faint</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="android:lineSpacingMultiplier">1.5</item>
+        <item name="android:gravity">top|start</item>
+        <item name="android:padding">18dp</item>
+        <item name="android:textCursorDrawable">@null</item>
+    </style>
+</resources>

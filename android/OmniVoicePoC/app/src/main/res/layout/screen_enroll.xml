@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/screenEnroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/enrollBack"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="-8dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/gen_cancel"
+            android:src="@drawable/ic_back" />
+
+        <TextView
+            style="@style/Voxl.Wordmark"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="@string/app_name" />
+
+        <TextView
+            style="@style/Voxl.Tag"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="@string/enroll_step1" />
+    </LinearLayout>
+
+    <Space android:layout_width="match_parent" android:layout_height="20dp" />
+
+    <TextView
+        style="@style/Voxl.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/enroll_title" />
+
+    <Space android:layout_width="match_parent" android:layout_height="8dp" />
+
+    <TextView
+        style="@style/Voxl.Body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/enroll_body" />
+
+    <Space android:layout_width="match_parent" android:layout_height="18dp" />
+
+    <!-- The sentence to read. Editable, because someone may want their own
+         words — but pre-filled, because a wrong transcript degrades the voice
+         with no error anywhere. -->
+    <EditText
+        android:id="@+id/scriptText"
+        style="@style/Voxl.Field"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/glass_panel"
+        android:importantForAutofill="no"
+        android:inputType="textMultiLine"
+        android:minLines="3"
+        android:padding="20dp"
+        android:textFontWeight="500"
+        android:textSize="19sp" />
+
+    <Space android:layout_width="match_parent" android:layout_height="14dp" />
+
+    <ai.omnivoice.poc.ui.WaveformView
+        android:id="@+id/enrollMeter"
+        android:layout_width="match_parent"
+        android:layout_height="48dp" />
+
+    <Space android:layout_width="match_parent" android:layout_height="10dp" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="3dp">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:background="@drawable/track_bg" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_marginStart="75dp"
+            android:layout_marginEnd="45dp"
+            android:background="@drawable/track_band" />
+
+        <View
+            android:id="@+id/enrollElapsed"
+            android:layout_width="0dp"
+            android:layout_height="3dp"
+            android:background="@drawable/track_fill" />
+    </FrameLayout>
+
+    <Space android:layout_width="match_parent" android:layout_height="6dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            style="@style/Voxl.Label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/enroll_min" />
+
+        <TextView
+            android:id="@+id/enrollSeconds"
+            style="@style/Voxl.Label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/accent_light" />
+
+        <TextView
+            style="@style/Voxl.Label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="end"
+            android:text="@string/enroll_max" />
+    </LinearLayout>
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <TextView
+        android:id="@+id/enrollStatus"
+        style="@style/Voxl.Caption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:gravity="center" />
+
+    <Button
+        android:id="@+id/enrollRecord"
+        style="@style/Voxl.Button.Rec"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="@string/enroll_start" />
+</LinearLayout>

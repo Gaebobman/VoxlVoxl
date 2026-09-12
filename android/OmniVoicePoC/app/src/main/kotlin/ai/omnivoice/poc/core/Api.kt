@@ -79,11 +79,24 @@ data class SynthesisProgress(
     val step: Int,
     val totalSteps: Int,
     val cellsRemaining: Int,
+    val cellsTotal: Int,
+    /**
+     * Fraction of each codebook that is resolved, 0..1, index 0 first.
+     *
+     * Measured rather than modelled: the un-masking loop subtracts
+     * `layerPenaltyFactor` per codebook index, so lower codebooks really do
+     * resolve first, and a UI that derives this from the total instead of
+     * counting it gets the shape wrong.
+     */
+    val perCodebook: FloatArray,
 ) {
     /** 0..1 over the whole job, chunks included. */
     val fraction: Float
         get() = ((chunk - 1) + step.toFloat() / totalSteps.coerceAtLeast(1)) /
             totalChunks.coerceAtLeast(1)
+
+    override fun equals(other: Any?) = this === other
+    override fun hashCode() = System.identityHashCode(this)
 }
 
 interface SpeechSynthesizer : AutoCloseable {

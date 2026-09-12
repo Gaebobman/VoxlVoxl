@@ -3,6 +3,9 @@ package ai.omnivoice.poc
 import ai.omnivoice.poc.core.AudioResult
 import ai.omnivoice.poc.core.VoiceProfile
 import ai.omnivoice.poc.core.VoiceStyle
+import ai.omnivoice.poc.ui.CodeStripView
+import ai.omnivoice.poc.ui.CodebookLadderView
+import ai.omnivoice.poc.ui.WaveformView
 import android.Manifest
 import android.content.ComponentName
 import android.content.Context
@@ -15,472 +18,799 @@ import android.os.IBinder
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.*
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.lifecycle.Lifecycle
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
 
 /**
- * The whole UI. Three groups: enroll a voice, synthesise text, inspect metrics.
+ * One activity, eight screens, a state machine.
  *
- * Shape driven by measurement rather than taste — a generation takes 20-80 s on
- * this device, so progress, an ETA and Cancel are the load-bearing controls, and
- * the work itself lives in [SynthesisService] so it survives app switches.
+ * The flow is linear — install, enroll, verify, voices, compose, generating,
+ * result — so a navigation graph would add indirection without adding clarity.
+ * The shape of each screen comes from design/; the reasons are in
+ * docs/feature-validation.md.
  */
 class MainActivity : AppCompatActivity() {
 
     companion object {
         const val TAG = "OmniVoice.UI"
-        private val STEP_CHOICES = listOf(
-            "8 fast" to 8,        // RTF 5.4, quality below the fp32 noise floor
-            "16 std" to 16,       // RTF 11.2, the measured knee
-            "32 best" to 32,      // RTF 24.6, ties fp32
-        )
-        private val LANGUAGES = listOf(
-            "auto" to "auto", "ko" to "ko", "en" to "en", "ja" to "ja", "zh" to "zh",
+        private val STEPS = listOf(8 to "5.4×", 16 to "11.2×", 32 to "24.6×")
+        private val THREADS = listOf(1 to "38.2×", 2 to "22.2×", 4 to "13.9×",
+            6 to "11.6×", 8 to "17.3×")
+        private val BACKENDS = listOf(
+            Triple(Backend.CPU, "11.06×", ""),
+            Triple(Backend.XNNPACK, "12.46×", "0 노드"),
+            Triple(Backend.NNAPI, "12.94×", "0 노드"),
         )
     }
 
-    private lateinit var voiceSpinner: Spinner
-    private lateinit var recordButton: Button
-    private lateinit var deleteVoiceButton: Button
-    private lateinit var recordStatus: TextView
-    private lateinit var refTextInput: EditText
-    private lateinit var enrollButton: Button
-    private lateinit var targetTextInput: EditText
-    private lateinit var tagRow: LinearLayout
-    private lateinit var generateButton: Button
-    private lateinit var cancelButton: Button
-    private lateinit var progressBar: ProgressBar
-    private lateinit var statusText: TextView
-    private lateinit var playButton: Button
-    private lateinit var replayButton: Button
-    private lateinit var saveButton: Button
-    private lateinit var stepsSpinner: Spinner
-    private lateinit var languageSpinner: Spinner
-    private lateinit var styleSpinner: Spinner
-    private lateinit var metricsText: TextView
+    private enum class Screen { FIRST_RUN, LIBRARY, ENROLL, VERIFY, COMPOSE, GENERATING, RESULT, DEV }
 
-    private var script: EnrollmentScripts.Script = EnrollmentScripts.ALL[0]
+    private lateinit var screens: FrameLayout
+    private val views = HashMap<Screen, View>()
+    private var current = Screen.LIBRARY
+    private var previous = Screen.LIBRARY
+
     private val recorder = VoiceRecorder()
     private val player = AudioOutput()
     private lateinit var profiles: FileVoiceProfileManager
     private var profileList: List<VoiceProfile> = emptyList()
+    private var selected: VoiceProfile? = null
+    private var reRecordingFor: VoiceProfile? = null
     private var recorded: FloatArray? = null
+    private var pendingProfile: VoiceProfile? = null
     private var lastResult: AudioResult? = null
+    private val queue = ArrayList<String>()
+
+    private var steps = 16
+    private var threads = SynthesisService.DEFAULT_THREADS
+    private var backend = Backend.CPU
 
     private var service: SynthesisService? = null
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             service = (binder as SynthesisService.LocalBinder).service
-            observeStatus()
+            observe()
         }
         override fun onServiceDisconnected(name: ComponentName?) { service = null }
     }
 
     private val micPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) startRecording()
-        else toast("Microphone permission is required to enroll a voice")
-    }
+    ) { granted -> if (granted) beginRecording() else toast("마이크 권한이 필요합니다") }
 
     private val notifPermission = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { /* a denied notification only costs the progress display */ }
+        ActivityResultContracts.RequestPermission()) { }
+
+    // ── lifecycle ────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        applyWindowInsets()
-        bindViews()
+        applyInsets()
+
+        screens = findViewById(R.id.screens)
+        views[Screen.FIRST_RUN] = findViewById(R.id.screenFirstRun)
+        views[Screen.LIBRARY] = findViewById(R.id.screenLibrary)
+        views[Screen.ENROLL] = findViewById(R.id.screenEnroll)
+        views[Screen.VERIFY] = findViewById(R.id.screenVerify)
+        views[Screen.COMPOSE] = findViewById(R.id.screenCompose)
+        views[Screen.GENERATING] = findViewById(R.id.screenGenerating)
+        views[Screen.RESULT] = findViewById(R.id.screenResult)
+        views[Screen.DEV] = findViewById(R.id.screenDev)
 
         profiles = FileVoiceProfileManager(File(filesDir, "voices"))
-        // The transcript is the pipeline's silent failure mode, so the app hands
-        // the user a sentence to read instead of asking them to transcribe. The
-        // field stays editable for anyone who wants to record their own words.
-        refTextInput.setText(script.text)
-        refreshProfiles()
-        setupSpinners()
-        setupTagRow()
-        wireButtons()
+        wire()
+        buildDevControls()
+        refreshVoices()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
-        ) {
-            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
+        ) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
 
-        bindService(Intent(this, SynthesisService::class.java), connection,
-            Context.BIND_AUTO_CREATE)
+        bindService(Intent(this, SynthesisService::class.java), connection, Context.BIND_AUTO_CREATE)
 
-        if (!File(File(filesDir, "models"), "omnivoice_lm.onnx").isFile) {
-            statusText.text = "Models are missing. Push them with scripts/push_models.sh."
-            generateButton.isEnabled = false
-        }
-        if (!OmniVoiceEnroller.available(File(filesDir, "models"))) {
-            recordStatus.text =
-                "Encoder models absent — this build can play a voice but not enroll one."
-            recordButton.isEnabled = false
-        }
+        show(if (modelsReady()) Screen.LIBRARY else Screen.FIRST_RUN)
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = goBack()
+        })
     }
 
-    /**
-     * targetSdk 36 enforces edge-to-edge, so the content would otherwise start at
-     * y=0 — behind the status bar, with the ActionBar drawn over the first
-     * control. Pad the scroll container by the system bars instead.
-     */
-    private fun applyWindowInsets() {
-        val root = findViewById<View>(R.id.rootScroll)
-        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+    /** targetSdk 36 enforces edge-to-edge; pad the screens, not the ground. */
+    private fun applyInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.screens)) { v, insets ->
             val bars = insets.getInsets(
-                androidx.core.view.WindowInsetsCompat.Type.systemBars() or
-                    androidx.core.view.WindowInsetsCompat.Type.ime())
-            v.setPadding(bars.left, 0, bars.right, bars.bottom)
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             insets
         }
     }
 
-    private fun bindViews() {
-        voiceSpinner = findViewById(R.id.voiceSpinner)
-        recordButton = findViewById(R.id.recordButton)
-        deleteVoiceButton = findViewById(R.id.deleteVoiceButton)
-        recordStatus = findViewById(R.id.recordStatus)
-        refTextInput = findViewById(R.id.refTextInput)
-        enrollButton = findViewById(R.id.enrollButton)
-        targetTextInput = findViewById(R.id.targetTextInput)
-        tagRow = findViewById(R.id.tagRow)
-        generateButton = findViewById(R.id.generateButton)
-        cancelButton = findViewById(R.id.cancelButton)
-        progressBar = findViewById(R.id.progressBar)
-        statusText = findViewById(R.id.statusText)
-        playButton = findViewById(R.id.playButton)
-        replayButton = findViewById(R.id.replayButton)
-        saveButton = findViewById(R.id.saveButton)
-        stepsSpinner = findViewById(R.id.stepsSpinner)
-        languageSpinner = findViewById(R.id.languageSpinner)
-        styleSpinner = findViewById(R.id.styleSpinner)
-        metricsText = findViewById(R.id.metricsText)
+    private fun modelsReady() = File(File(filesDir, "models"), "omnivoice_lm.onnx").isFile
+
+    private fun show(s: Screen) {
+        if (s != Screen.DEV) previous = current
+        current = s
+        for ((k, v) in views) v.visibility = if (k == s) View.VISIBLE else View.GONE
     }
 
-    private fun <T> spinner(view: Spinner, labels: List<String>, select: Int = 0) {
-        view.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
-        if (labels.isNotEmpty()) view.setSelection(select.coerceIn(0, labels.size - 1))
-    }
-
-    private fun setupSpinners() {
-        spinner<Int>(stepsSpinner, STEP_CHOICES.map { it.first }, 1)
-        spinner<String>(languageSpinner, LANGUAGES.map { it.second }, 0)
-        // Design styles only apply when no profile is selected — measured:
-        // with a clone prompt the instruct is ignored entirely.
-        spinner<String>(styleSpinner,
-            listOf("no style") + OmniVoiceStyle.designPresets().map { it.label }, 0)
-    }
-
-    private fun setupTagRow() {
-        // Tags append an event rather than colouring the sentence, so they
-        // insert at the cursor.
-        for (tag in OmniVoiceStyle.NON_VERBAL_VERIFIED) {
-            tagRow.addView(Button(this).apply {
-                text = tag.substringBefore('-')
-                textSize = 11f
-                setOnClickListener { insertAtCursor("[$tag]") }
-                layoutParams = LinearLayout.LayoutParams(0,
-                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            })
+    private fun goBack() {
+        when (current) {
+            Screen.DEV -> show(previous)
+            Screen.ENROLL -> { cancelRecording(); show(Screen.LIBRARY) }
+            Screen.VERIFY -> show(Screen.ENROLL)
+            Screen.COMPOSE -> show(Screen.LIBRARY)
+            Screen.RESULT -> show(Screen.COMPOSE)
+            Screen.GENERATING -> toast("생성 중입니다 — 취소를 누르세요")
+            else -> finish()
         }
     }
 
-    private fun insertAtCursor(s: String) {
-        val at = targetTextInput.selectionStart.coerceAtLeast(0)
-        targetTextInput.text.insert(at, s)
-    }
+    // ── wiring ───────────────────────────────────────────────────────────
 
-    private fun wireButtons() {
-        recordButton.setOnClickListener {
-            if (recorder.isRecording) stopRecording()
+    private fun <T : View> id(i: Int): T = findViewById(i)
+
+    private fun wire() {
+        id<ImageButton>(R.id.openDev).setOnClickListener { show(Screen.DEV) }
+        id<ImageButton>(R.id.composeDev).setOnClickListener { show(Screen.DEV) }
+        id<ImageButton>(R.id.devBack).setOnClickListener { show(previous) }
+        id<ImageButton>(R.id.enrollBack).setOnClickListener { goBack() }
+        id<ImageButton>(R.id.composeBack).setOnClickListener { goBack() }
+        id<ImageButton>(R.id.resultBack).setOnClickListener { goBack() }
+        id<Button>(R.id.installContinue).setOnClickListener { show(Screen.LIBRARY) }
+
+        id<Button>(R.id.addVoice).setOnClickListener { startEnroll(null) }
+        id<Button>(R.id.goCompose).setOnClickListener {
+            if (profileList.isEmpty()) toast("먼저 목소리를 등록하세요") else show(Screen.COMPOSE)
+        }
+
+        id<Button>(R.id.enrollRecord).setOnClickListener {
+            if (recorder.isRecording) finishRecording()
             else if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
-                PackageManager.PERMISSION_GRANTED
-            ) startRecording()
+                PackageManager.PERMISSION_GRANTED) beginRecording()
             else micPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
 
-        refTextInput.addTextChangedListener(object : TextWatcher {
-            override fun afterTextChanged(s: Editable?) { updateEnrollEnabled() }
+        id<ImageButton>(R.id.verifyPlay).setOnClickListener { togglePlay(R.id.verifyPlay) }
+        id<Button>(R.id.verifyAgain).setOnClickListener {
+            pendingProfile = null; player.release(); show(Screen.ENROLL)
+        }
+        id<Button>(R.id.verifyKeep).setOnClickListener { keepProfile() }
+
+        id<Button>(R.id.generate).setOnClickListener { startGeneration() }
+        id<Button>(R.id.genCancel).setOnClickListener { service?.cancel() }
+        id<ImageButton>(R.id.queueAdd).setOnClickListener { enqueue() }
+
+        id<ImageButton>(R.id.resultPlay).setOnClickListener { togglePlay(R.id.resultPlay) }
+        id<ImageButton>(R.id.resultReplay).setOnClickListener {
+            player.replay(); setPlayIcon(R.id.resultPlay, true); startTicking(R.id.resultPlay)
+        }
+        id<Button>(R.id.resultSave).setOnClickListener { saveWav() }
+        id<Button>(R.id.resultShare).setOnClickListener { shareWav() }
+
+        id<EditText>(R.id.targetText).addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) = updateEstimate()
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
         })
 
-        enrollButton.setOnClickListener { enroll() }
-        deleteVoiceButton.setOnClickListener { deleteSelectedVoice() }
-        deleteVoiceButton.setOnLongClickListener { testSelectedVoice(); true }
-        generateButton.setOnClickListener { generate() }
-        cancelButton.setOnClickListener { service?.cancel() }
-
-        playButton.setOnClickListener {
-            if (player.state == AudioOutput.State.PLAYING) {
-                player.pause(); playButton.setText(R.string.play)
-            } else {
-                player.play(); playButton.setText(R.string.pause)
-            }
+        val tagRow = id<LinearLayout>(R.id.tagRow)
+        for (tag in OmniVoiceStyle.NON_VERBAL_VERIFIED) {
+            tagRow.addView(chip(tagLabel(tag)) { insertTag("[$tag]") }, chipParams())
         }
-        replayButton.setOnClickListener {
-            player.replay(); playButton.setText(R.string.pause)
-        }
-        saveButton.setOnClickListener { save() }
     }
 
-    // --- enrollment ------------------------------------------------------
+    private fun tagLabel(tag: String) = when (tag) {
+        "laughter" -> "웃음"; "sigh" -> "한숨"
+        "surprise-ah", "surprise-oh" -> "놀람"
+        "question-en" -> "되물음"; "confirmation-en" -> "맞장구"
+        else -> tag
+    }
 
-    private fun startRecording() {
+    private fun chip(text: String, onClick: () -> Unit) = Button(this).apply {
+        setText(text)
+        setTextAppearance(R.style.Voxl_Chip)
+        background = getDrawable(R.drawable.glass_chip)
+        setTextColor(getColor(R.color.text))
+        isAllCaps = false
+        stateListAnimator = null
+        setOnClickListener { onClick() }
+    }
+
+    private fun chipParams() = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.WRAP_CONTENT, (44 * resources.displayMetrics.density).toInt()
+    ).apply { marginEnd = (7 * resources.displayMetrics.density).toInt() }
+
+    private fun insertTag(s: String) {
+        val f = id<EditText>(R.id.targetText)
+        f.text.insert(f.selectionStart.coerceAtLeast(0), s)
+    }
+
+    // ── voices ───────────────────────────────────────────────────────────
+
+    private fun refreshVoices() {
+        profileList = profiles.list()
+        if (selected == null || profileList.none { it.id == selected!!.id }) {
+            selected = profileList.firstOrNull()
+        }
+        val list = id<LinearLayout>(R.id.voiceList)
+        list.removeAllViews()
+        if (profileList.isEmpty()) {
+            list.addView(TextView(this).apply {
+                setText(R.string.voices_none)
+                setTextAppearance(R.style.Voxl_Caption)
+                setPadding(0, (24 * resources.displayMetrics.density).toInt(), 0, 0)
+                gravity = android.view.Gravity.CENTER
+            })
+        }
+        for (p in profileList) list.addView(voiceCard(p, list))
+        updateComposeVoice()
+    }
+
+    private fun voiceCard(p: VoiceProfile, parent: ViewGroup): View {
+        val v = LayoutInflater.from(this).inflate(R.layout.item_voice, parent, false)
+        v.isSelected = p.id == selected?.id
+        v.findViewById<TextView>(R.id.voiceName).text = p.displayName
+        v.findViewById<TextView>(R.id.voiceDuration).text =
+            "%.1f초".format(p.frames.toFloat() / OV.FRAME_RATE)
+        v.findViewById<TextView>(R.id.voiceQuote).text = "“${p.refText}”"
+        v.findViewById<TextView>(R.id.voiceBadge).apply {
+            text = "사용 중"
+            visibility = if (p.id == selected?.id) View.VISIBLE else View.GONE
+        }
+        // The recording is deliberately not kept, so there is no waveform to
+        // draw. The card shows the 1.8 kB that IS kept — the codec codes.
+        v.findViewById<CodeStripView>(R.id.voiceWave).apply {
+            tone = if (p.id == selected?.id) CodeStripView.Tone.AMBER else CodeStripView.Tone.VIOLET
+            setCodes(p.codes)
+        }
+        v.setOnClickListener { selected = p; refreshVoices() }
+        v.findViewById<Button>(R.id.voiceTest).setOnClickListener { testVoice(p) }
+        v.findViewById<Button>(R.id.voiceRerecord).setOnClickListener { startEnroll(p) }
+        v.findViewById<Button>(R.id.voiceDelete).setOnClickListener { confirmDelete(p) }
+        return v
+    }
+
+    private fun confirmDelete(p: VoiceProfile) {
+        AlertDialog.Builder(this)
+            .setTitle("${p.displayName} 삭제")
+            .setMessage("이 기기에서 지워집니다. 되돌릴 수 없습니다.")
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                profiles.delete(p.id); refreshVoices()
+            }.show()
+    }
+
+    private fun testVoice(p: VoiceProfile) {
+        selected = p
+        startGeneration(EnrollmentScripts.TEST_SENTENCE)
+    }
+
+    // ── enrollment ───────────────────────────────────────────────────────
+
+    private fun startEnroll(replacing: VoiceProfile?) {
+        if (!OmniVoiceEnroller.available(File(filesDir, "models"))) {
+            toast("등록 모델이 없습니다 — 이 빌드로는 재생만 가능합니다"); return
+        }
+        reRecordingFor = replacing
+        recorded = null
+        id<EditText>(R.id.scriptText).setText(replacing?.refText ?: EnrollmentScripts.ALL[0].text)
+        id<TextView>(R.id.enrollStatus).text = ""
+        id<WaveformView>(R.id.enrollMeter).clear()
+        id<TextView>(R.id.enrollSeconds).text = ""
+        setElapsed(0f)
+        id<Button>(R.id.enrollRecord).setText(R.string.enroll_start)
+        show(Screen.ENROLL)
+    }
+
+    private fun beginRecording() {
+        val meter = id<WaveformView>(R.id.enrollMeter).apply { tone = WaveformView.Tone.REC }
+        meter.startLive()
         runCatching {
             recorder.start { level ->
                 runOnUiThread {
-                    recordStatus.text = "Recording %.1fs  level %.2f".format(
-                        recorder.seconds, level)
+                    meter.pushLevel(level * 3f)
+                    val s = recorder.seconds
+                    id<TextView>(R.id.enrollSeconds).text = "%.1f초 · %s".format(s, getString(R.string.enroll_band))
+                    setElapsed(s / VoiceRecorder.RECOMMENDED_MAX_SECONDS)
                 }
             }
-        }.onFailure { toast(it.message ?: "recording failed"); return }
-        recorded = null
-        recordButton.setText(R.string.stop_recording)
-        updateEnrollEnabled()
+        }.onFailure { toast(it.message ?: "녹음 실패"); return }
+        id<Button>(R.id.enrollRecord).setText(R.string.enroll_stop)
     }
 
-    private fun stopRecording() {
+    private fun setElapsed(fraction: Float) {
+        val bar = id<View>(R.id.enrollElapsed)
+        val parent = bar.parent as View
+        bar.layoutParams = (bar.layoutParams as FrameLayout.LayoutParams).apply {
+            width = (parent.width * fraction.coerceIn(0f, 1f)).toInt()
+        }
+        bar.requestLayout()
+    }
+
+    private fun cancelRecording() {
+        if (recorder.isRecording) recorder.cancel()
+        id<Button>(R.id.enrollRecord).setText(R.string.enroll_start)
+    }
+
+    private fun finishRecording() {
         val pcm = recorder.stop()
         recorded = pcm
-        recordButton.setText(R.string.record)
+        id<Button>(R.id.enrollRecord).setText(R.string.enroll_start)
         val secs = pcm.size.toFloat() / VoiceRecorder.SAMPLE_RATE
-        recordStatus.text = when {
-            secs < VoiceRecorder.MIN_SECONDS ->
-                "Only %.1fs — record at least %.0fs".format(secs, VoiceRecorder.MIN_SECONDS)
-            secs > VoiceRecorder.RECOMMENDED_MAX_SECONDS ->
-                ("%.1fs recorded. Longer references slow every generation " +
-                    "without improving the voice.").format(secs)
-            else -> "%.1fs recorded. Now type exactly what you said.".format(secs)
+        if (secs < VoiceRecorder.MIN_SECONDS) {
+            id<TextView>(R.id.enrollStatus).text =
+                "%.1f초뿐입니다 — %.0f초 이상 녹음하세요".format(secs, VoiceRecorder.MIN_SECONDS)
+            return
         }
-        updateEnrollEnabled()
+        val refText = id<EditText>(R.id.scriptText).text.toString()
+        if (refText.isBlank()) { toast("읽은 문장이 필요합니다"); return }
+        id<TextView>(R.id.enrollStatus).text = "목소리를 변환하는 중…"
+        service?.enroll(pcm, VoiceRecorder.SAMPLE_RATE, refText,
+            reRecordingFor?.displayName
+                ?: SimpleDateFormat("M월 d일 HH:mm", Locale.KOREA).format(System.currentTimeMillis()))
+            ?: toast("서비스가 아직 준비되지 않았습니다")
     }
 
-    private fun updateEnrollEnabled() {
-        val pcm = recorded
-        enrollButton.isEnabled = pcm != null &&
-            pcm.size >= VoiceRecorder.MIN_SECONDS * VoiceRecorder.SAMPLE_RATE &&
-            refTextInput.text.isNotBlank()
+    private fun onEnrolled(p: VoiceProfile, echo: FloatArray, millis: Long) {
+        pendingProfile = p
+        player.load(echo, OV.SR_24K)
+        id<WaveformView>(R.id.verifyWave).apply {
+            tone = WaveformView.Tone.AMBER
+            setWaveform(echo, buckets = 44)
+        }
+        id<TextView>(R.id.verifyMeta).text =
+            "%.1f초 · %d ms 만에 준비됨".format(p.frames.toFloat() / OV.FRAME_RATE, millis)
+        buildChecks(p)
+        setPlayIcon(R.id.verifyPlay, false)
+        show(Screen.VERIFY)
     }
 
-    private fun enroll() {
-        val pcm = recorded ?: return
-        val svc = service ?: return toast("Synthesis service is not bound yet")
-        enrollButton.isEnabled = false
-        recordStatus.text = "목소리를 변환하는 중…"
-        svc.enroll(pcm, VoiceRecorder.SAMPLE_RATE, refTextInput.text.toString(),
-            SimpleDateFormat("MMM d HH:mm", Locale.getDefault())
-                .format(System.currentTimeMillis()))
+    private fun buildChecks(p: VoiceProfile) {
+        val box = id<LinearLayout>(R.id.verifyChecks)
+        box.removeAllViews()
+        val dp = resources.displayMetrics.density
+        val secs = p.frames.toFloat() / OV.FRAME_RATE
+        val items = listOf(
+            "%.1f초 확보 — 3초 이상".format(secs) to (secs >= VoiceRecorder.MIN_SECONDS),
+            "레벨 적정 (rms %.3f)".format(p.refRms) to (p.refRms in 0.01f..0.5f),
+            "읽은 문장 기록됨" to p.refText.isNotBlank(),
+        )
+        for ((text, ok) in items) {
+            box.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
+                addView(ImageView(this@MainActivity).apply {
+                    setImageResource(if (ok) R.drawable.ic_check else R.drawable.ic_close)
+                    layoutParams = LinearLayout.LayoutParams((15 * dp).toInt(), (15 * dp).toInt())
+                })
+                addView(TextView(this@MainActivity).apply {
+                    setText(text)
+                    setTextAppearance(R.style.Voxl_Body)
+                    setTextColor(getColor(if (ok) R.color.text else R.color.rec))
+                    textSize = 13f
+                    setPadding((9 * dp).toInt(), 0, 0, 0)
+                })
+            })
+        }
+    }
+
+    private fun keepProfile() {
+        val p = pendingProfile ?: return
+        reRecordingFor?.let { if (it.id != p.id) profiles.delete(it.id) }
+        profiles.save(p)
+        selected = p
+        pendingProfile = null
+        reRecordingFor = null
+        player.release()
+        refreshVoices()
+        show(Screen.LIBRARY)
+    }
+
+    // ── generation ───────────────────────────────────────────────────────
+
+    private fun updateComposeVoice() {
+        val p = selected
+        id<TextView>(R.id.composeVoiceName).text = p?.displayName ?: getString(R.string.no_voice)
+        id<TextView>(R.id.composeVoiceMeta).text =
+            p?.let { "%.1f초 참조".format(it.frames.toFloat() / OV.FRAME_RATE) } ?: ""
+        id<LinearLayout>(R.id.composeVoice).setOnClickListener { show(Screen.LIBRARY) }
+        updateEstimate()
     }
 
     /**
-     * Enrollment finishes with the echo, not with a test synthesis: the echo is
-     * what the model will hear as its reference, costs ~0.5 s warm against ~20 s
-     * for a generation, and reveals clipping, over-trimming and level problems
-     * that a test sentence would only hint at. "Test voice" stays as the next,
-     * optional step.
+     * The estimate uses the same duration model the engine uses, and the RTF the
+     * device actually measured, so the number on screen is the number the user
+     * will live through.
      */
-    private fun renderEnroll(s: SynthesisService.EnrollStatus) {
-        when (s) {
-            is SynthesisService.EnrollStatus.Idle -> Unit
-            is SynthesisService.EnrollStatus.Encoding -> {
-                recordStatus.text = "목소리를 변환하는 중…"
-                enrollButton.isEnabled = false
-            }
-            is SynthesisService.EnrollStatus.Ready -> {
-                profiles.save(s.profile)
-                refreshProfiles()
-                voiceSpinner.setSelection(profileList.indexOfFirst { it.id == s.profile.id } + 1)
-                player.load(s.echo, OV.SR_24K)
-                playButton.isEnabled = true
-                replayButton.isEnabled = true
-                recordStatus.text = "등록 완료 · %.1f초. 재생을 눌러 시스템이 들은 소리를 확인하세요 (%d ms)"
-                    .format(s.profile.frames.toFloat() / OV.FRAME_RATE, s.millis)
-                recorded = null
-                refTextInput.setText(script.text)
-                service?.clearEnrollment()
-                updateEnrollEnabled()
-            }
-            is SynthesisService.EnrollStatus.Failed -> {
-                recordStatus.text = s.error.message ?: "등록 실패"
-                Log.e(TAG, "enrollment failed", s.error)
-                service?.clearEnrollment()
-                updateEnrollEnabled()
-            }
+    private fun updateEstimate() {
+        val text = id<EditText>(R.id.targetText).text.toString()
+        val det = LanguageDetector.detect(text)
+        id<TextView>(R.id.composeLanguage).text = det.label
+        if (text.isBlank()) { id<TextView>(R.id.composeEstimate).text = ""; return }
+        val p = selected
+        val frames = DurationEstimator.estimateFrames(text, p?.refText, p?.frames ?: 0)
+        val audio = frames.toFloat() / OV.FRAME_RATE
+        val rtf = when (steps) { 8 -> 5.4f; 32 -> 24.6f; else -> 11.2f }
+        id<TextView>(R.id.composeEstimate).text =
+            "약 %.1f초 · 만드는 데 %d초".format(audio, (audio * rtf).toInt())
+    }
+
+    private fun startGeneration(overrideText: String? = null) {
+        val text = overrideText ?: id<EditText>(R.id.targetText).text.toString().trim()
+        if (text.isEmpty()) return toast("문장을 입력하세요")
+        val svc = service ?: return toast("서비스가 아직 준비되지 않았습니다")
+        val det = LanguageDetector.detect(text)
+        id<TextView>(R.id.genText).text = text
+        id<CodebookLadderView>(R.id.ladder).reset()
+        svc.synthesize(
+            text = text, profile = selected,
+            style = VoiceStyle(language = det.code ?: "None"),
+            steps = steps, threads = threads,
+        )
+        show(Screen.GENERATING)
+    }
+
+    private fun enqueue() {
+        val f = id<EditText>(R.id.queueInput)
+        val t = f.text.toString().trim()
+        if (t.isEmpty()) return
+        queue.add(t)
+        f.setText("")
+        renderQueue()
+    }
+
+    private fun renderQueue() {
+        val box = id<LinearLayout>(R.id.queueList)
+        box.removeAllViews()
+        val dp = resources.displayMetrics.density
+        queue.forEachIndexed { i, t ->
+            box.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                background = getDrawable(R.drawable.glass_chip)
+                setPadding((14 * dp).toInt(), (12 * dp).toInt(), (14 * dp).toInt(), (12 * dp).toInt())
+                addView(TextView(this@MainActivity).apply {
+                    text = "${i + 1}"
+                    setTextAppearance(R.style.Voxl_Readout)
+                    width = (18 * dp).toInt()
+                })
+                addView(TextView(this@MainActivity).apply {
+                    setText(t)
+                    setTextAppearance(R.style.Voxl_Body)
+                    setTextColor(getColor(R.color.text))
+                    textSize = 12.5f
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    layoutParams = LinearLayout.LayoutParams(0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                })
+                addView(TextView(this@MainActivity).apply {
+                    setText("대기")
+                    setTextAppearance(R.style.Voxl_Readout)
+                    textSize = 10.5f
+                })
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = (8 * dp).toInt()
+            })
         }
     }
 
-    private fun refreshProfiles() {
-        profileList = profiles.list()
-        val labels = listOf(getString(R.string.no_voice)) +
-            profileList.map { "${it.displayName}  (%.1fs)".format(it.frames.toFloat() / OV.FRAME_RATE) }
-        val keep = voiceSpinner.selectedItemPosition.coerceIn(0, labels.size - 1)
-        spinner<String>(voiceSpinner, labels, keep)
-        deleteVoiceButton.isEnabled = profileList.isNotEmpty()
-    }
-
-    private fun selectedProfile(): VoiceProfile? =
-        profileList.getOrNull(voiceSpinner.selectedItemPosition - 1)
-
-    /** Spec §6 "Test Voice" — the optional full synthesis, after the echo. */
-    private fun testSelectedVoice() {
-        val p = selectedProfile() ?: return toast("No voice selected")
-        service?.synthesize(
-            text = EnrollmentScripts.TEST_SENTENCE, profile = p,
-            style = VoiceStyle(language = "ko"), steps = 16,
-        ) ?: toast("Synthesis service is not bound yet")
-    }
-
-    private fun deleteSelectedVoice() {
-        val p = selectedProfile() ?: return toast("No voice selected")
-        AlertDialog.Builder(this)
-            .setTitle("Delete ${p.displayName}?")
-            .setMessage("The voice profile is removed from this device. This cannot be undone.")
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                profiles.delete(p.id)
-                refreshProfiles()
-            }
-            .show()
-    }
-
-    // --- synthesis -------------------------------------------------------
-
-    private fun generate() {
-        val text = targetTextInput.text.toString().trim()
-        if (text.isEmpty()) return toast("Enter some text")
-
-        val profile = selectedProfile()
-        val styleIndex = styleSpinner.selectedItemPosition - 1
-        val instruct = if (profile == null && styleIndex >= 0)
-            OmniVoiceStyle.designPresets()[styleIndex].instruct else null
-        if (profile != null && styleIndex >= 0) {
-            toast("Style presets apply only without a voice — record a different " +
-                "reference to change how the voice speaks")
-        }
-
-        val chosen = LANGUAGES[languageSpinner.selectedItemPosition].first
-        val language = if (chosen == "auto") {
-            // The Unicode tables that weight speaking time also identify the
-            // script, so detection is free and beats a dropdown pinned to "ko".
-            LanguageDetector.detect(text).code ?: "None"
-        } else chosen
-        val style = VoiceStyle(instruct = instruct, language = language)
-        service?.synthesize(
-            text = text, profile = profile, style = style,
-            steps = STEP_CHOICES[stepsSpinner.selectedItemPosition].second,
-        ) ?: toast("Synthesis service is not bound yet")
-    }
-
-    private fun observeStatus() {
+    private fun observe() {
         val svc = service ?: return
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { svc.status.collect { render(it) } }
-                launch { svc.enrollStatus.collect { renderEnroll(it) } }
+                launch {
+                    svc.enrollStatus.collect { s ->
+                        when (s) {
+                            is SynthesisService.EnrollStatus.Encoding ->
+                                id<TextView>(R.id.enrollStatus).text = "목소리를 변환하는 중…"
+                            is SynthesisService.EnrollStatus.Ready -> {
+                                onEnrolled(s.profile, s.echo, s.millis)
+                                svc.clearEnrollment()
+                            }
+                            is SynthesisService.EnrollStatus.Failed -> {
+                                id<TextView>(R.id.enrollStatus).text = s.error.message ?: "등록 실패"
+                                svc.clearEnrollment()
+                            }
+                            else -> Unit
+                        }
+                    }
+                }
             }
         }
     }
 
     private fun render(s: SynthesisService.Status) {
-        val busy = s is SynthesisService.Status.Running || s is SynthesisService.Status.Loading
-        generateButton.isEnabled = !busy
-        cancelButton.isEnabled = busy
         when (s) {
-            is SynthesisService.Status.Idle -> statusText.text = "Idle"
             is SynthesisService.Status.Loading -> {
-                statusText.text = "Loading models…"
-                progressBar.isIndeterminate = true
+                id<TextView>(R.id.genEta).text = "—"
+                id<TextView>(R.id.genEtaUnit).text = "모델 여는 중"
             }
             is SynthesisService.Status.Running -> {
-                progressBar.isIndeterminate = false
-                progressBar.progress = (s.progress.fraction * 100).toInt()
-                statusText.text = buildString {
-                    append("Generating  step ${s.progress.step}/${s.progress.totalSteps}")
-                    if (s.progress.totalChunks > 1) {
-                        append("  chunk ${s.progress.chunk}/${s.progress.totalChunks}")
-                    }
-                    s.etaSeconds?.let { append("  ~${it.toInt()}s left") }
-                }
+                val p = s.progress
+                id<TextView>(R.id.genEta).text = s.etaSeconds?.toInt()?.toString() ?: "—"
+                id<TextView>(R.id.genEtaUnit).text = if (s.etaSeconds != null) "초 남음" else ""
+                id<TextView>(R.id.genStep).text = "${p.step} / ${p.totalSteps} 단계"
+                id<TextView>(R.id.genCells).text =
+                    "${p.cellsTotal - p.cellsRemaining} / ${p.cellsTotal} 칸"
+                id<CodebookLadderView>(R.id.ladder).setProgress(p.perCodebook)
             }
             is SynthesisService.Status.Done -> {
-                progressBar.isIndeterminate = false
-                progressBar.progress = 100
                 lastResult = s.result
                 player.load(s.result.samples, s.result.sampleRate)
-                playButton.isEnabled = true
-                replayButton.isEnabled = true
-                saveButton.isEnabled = true
-                playButton.setText(R.string.play)
-                val m = s.result.metrics
-                statusText.text = "Done — %.2fs of audio".format(m.audioSeconds)
-                metricsText.text = buildString {
-                    appendLine("RTF          %.2f".format(m.rtf))
-                    appendLine("total        %d ms".format(m.totalMillis))
-                    appendLine("  generate   %d ms".format(m.generateMillis))
-                    appendLine("  vocoder    %d ms".format(m.decodeMillis))
-                    appendLine("  post       %d ms".format(m.postMillis))
-                    appendLine("model load   %d ms".format(m.modelLoadMillis))
-                    appendLine("sequence     %d  frames %d  chunks %d"
-                        .format(m.sequenceLength, m.targetFrames, m.chunks))
-                    append("thermal      %d %s".format(m.thermalStatus,
-                        if (m.thermalStatus > 0) "(warm — expect ~2x slower)" else ""))
+                showResult(s.result)
+                if (queue.isNotEmpty()) {
+                    val next = queue.removeAt(0)
+                    renderQueue()
+                    id<EditText>(R.id.targetText).setText(next)
                 }
             }
-            is SynthesisService.Status.Cancelled -> {
-                progressBar.isIndeterminate = false
-                progressBar.progress = 0
-                statusText.text = "Cancelled"
-            }
+            is SynthesisService.Status.Cancelled -> show(Screen.COMPOSE)
             is SynthesisService.Status.Failed -> {
-                progressBar.isIndeterminate = false
-                progressBar.progress = 0
-                statusText.text = s.error.message ?: "Generation failed"
+                toast(s.error.message ?: "생성 실패")
                 Log.e(TAG, "generation failed", s.error)
+                show(Screen.COMPOSE)
             }
+            else -> Unit
         }
     }
 
-    private fun save() {
-        val r = lastResult ?: return
-        val dir = File(getExternalFilesDir(null), "out").apply { mkdirs() }
-        val name = "voxlvoxl_%s.wav".format(
-            SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(System.currentTimeMillis()))
-        runCatching {
-            WavIo.write(File(dir, name), r.samples, r.sampleRate)
-        }.onSuccess {
-            toast("Saved ${File(dir, name).absolutePath}")
-        }.onFailure {
-            toast(it.message ?: "save failed")
+    private fun showResult(r: AudioResult) {
+        id<TextView>(R.id.resultText).text = id<TextView>(R.id.genText).text
+        id<WaveformView>(R.id.resultWave).apply {
+            tone = WaveformView.Tone.AMBER
+            setWaveform(r.samples, buckets = 52)
+            progress = 0f
         }
+        id<TextView>(R.id.resultTime).text = "0:00 / %s".format(clock(r.metrics.audioSeconds))
+        setPlayIcon(R.id.resultPlay, false)
+        val m = r.metrics
+        id<TextView>(R.id.metricsRtf).text = "%.1f".format(m.rtf)
+        id<TextView>(R.id.metricsWall).text =
+            "%.2f초를 %.1f초에".format(m.audioSeconds, m.totalMillis / 1000.0)
+        id<TextView>(R.id.metricsConfig).text = "$backend ×$threads · int4"
+        val table = id<TableLayout>(R.id.metricsTable)
+        table.removeAllViews()
+        val dp = resources.displayMetrics.density
+        fun row(a: String, av: String, b: String, bv: String) {
+            table.addView(TableRow(this).apply {
+                addView(cell(a, false))
+                addView(cell(av, true).apply { setPadding((10 * dp).toInt(), (3 * dp).toInt(), 0, (3 * dp).toInt()) })
+                addView(cell(b, false).apply { setPadding((20 * dp).toInt(), (3 * dp).toInt(), 0, (3 * dp).toInt()) })
+                addView(cell(bv, true).apply { setPadding((10 * dp).toInt(), (3 * dp).toInt(), 0, (3 * dp).toInt()) })
+            })
+        }
+        row("생성", "${m.generateMillis} ms", "보코더", "${m.decodeMillis} ms")
+        row("모델 로드", "${m.modelLoadMillis} ms", "후처리", "${m.postMillis} ms")
+        row("시퀀스", "${m.sequenceLength}", "청크", "${m.chunks}")
+        id<LinearLayout>(R.id.genThermal).visibility =
+            if (m.thermalStatus > 0) View.VISIBLE else View.GONE
+        show(Screen.RESULT)
+    }
+
+    private fun cell(text: String, value: Boolean) = TextView(this).apply {
+        setText(text)
+        setTextAppearance(if (value) R.style.Voxl_Readout_Value else R.style.Voxl_Readout)
+        textSize = 11f
+        setPadding(0, (3 * resources.displayMetrics.density).toInt(), 0, (3 * resources.displayMetrics.density).toInt())
+    }
+
+    private fun clock(seconds: Double): String {
+        val s = seconds.toInt()
+        return "%d:%02d".format(s / 60, s % 60)
+    }
+
+    // ── playback ─────────────────────────────────────────────────────────
+
+    private val ticker = android.os.Handler(android.os.Looper.getMainLooper())
+    private var tick: Runnable? = null
+
+    private fun togglePlay(buttonId: Int) {
+        if (player.state == AudioOutput.State.PLAYING) {
+            player.pause()
+            setPlayIcon(buttonId, false)
+            stopTicking()
+        } else {
+            player.play()
+            setPlayIcon(buttonId, true)
+            startTicking(buttonId)
+        }
+    }
+
+    /**
+     * AudioTrack reports the head position but tells nobody, so the waveform and
+     * the clock have to be driven. 60 ms is well under a frame and costs a single
+     * invalidate on a view that is already on screen.
+     */
+    private fun startTicking(buttonId: Int) {
+        stopTicking()
+        val wave = if (buttonId == R.id.resultPlay)
+            id<WaveformView>(R.id.resultWave) else id<WaveformView>(R.id.verifyWave)
+        val clock = if (buttonId == R.id.resultPlay) id<TextView>(R.id.resultTime) else null
+        val total = player.durationSeconds
+        val r = object : Runnable {
+            override fun run() {
+                val p = player.progress
+                wave.progress = p
+                clock?.text = "%s / %s".format(clock(p * total.toDouble()), clock(total.toDouble()))
+                if (player.state != AudioOutput.State.PLAYING || p >= 0.999f) {
+                    setPlayIcon(buttonId, false)
+                    if (p >= 0.999f) player.stop()
+                    return
+                }
+                ticker.postDelayed(this, 60)
+            }
+        }
+        tick = r
+        ticker.post(r)
+    }
+
+    private fun stopTicking() {
+        tick?.let { ticker.removeCallbacks(it) }
+        tick = null
+    }
+
+    private fun setPlayIcon(buttonId: Int, playing: Boolean) {
+        id<ImageButton>(buttonId).setImageResource(
+            if (playing) R.drawable.ic_pause else R.drawable.ic_play)
+    }
+
+    private fun outFile(): File {
+        val dir = File(getExternalFilesDir(null), "out").apply { mkdirs() }
+        return File(dir, "voxlvoxl_%s.wav".format(
+            SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(System.currentTimeMillis())))
+    }
+
+    private fun saveWav() {
+        val r = lastResult ?: return
+        runCatching { outFile().also { WavIo.write(it, r.samples, r.sampleRate) } }
+            .onSuccess { toast("저장됨: ${it.absolutePath}") }
+            .onFailure { toast(it.message ?: "저장 실패") }
+    }
+
+    private fun shareWav() {
+        val r = lastResult ?: return
+        runCatching {
+            val f = outFile()
+            WavIo.write(f, r.samples, r.sampleRate)
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this, "$packageName.files", f)
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                type = "audio/wav"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }, getString(R.string.share)))
+        }.onFailure { toast(it.message ?: "공유 실패") }
+    }
+
+    // ── developer settings ───────────────────────────────────────────────
+
+    private fun buildDevControls() {
+        val dp = resources.displayMetrics.density
+        val stepRow = id<LinearLayout>(R.id.devSteps)
+        fun rebuildSteps() {
+            stepRow.removeAllViews()
+            for ((v, rtf) in STEPS) {
+                stepRow.addView(segment("$v", rtf, v == steps) {
+                    steps = v; rebuildSteps(); updateEstimate()
+                }, segParams())
+            }
+        }
+        rebuildSteps()
+
+        val threadRow = id<LinearLayout>(R.id.devThreads)
+        fun rebuildThreads() {
+            threadRow.removeAllViews()
+            for ((v, rtf) in THREADS) {
+                threadRow.addView(segment("$v", rtf, v == threads) {
+                    threads = v; rebuildThreads()
+                }, segParams())
+            }
+        }
+        rebuildThreads()
+
+        val backendBox = id<LinearLayout>(R.id.devBackends)
+        fun rebuildBackends() {
+            backendBox.removeAllViews()
+            for ((b, rtf, note) in BACKENDS) {
+                val active = b == backend
+                backendBox.addView(LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    background = getDrawable(R.drawable.glass_card)
+                    isSelected = active
+                    setPadding((15 * dp).toInt(), (13 * dp).toInt(), (15 * dp).toInt(), (13 * dp).toInt())
+                    addView(TextView(this@MainActivity).apply {
+                        setText(b.name)
+                        setTextAppearance(R.style.Voxl_Body)
+                        setTextColor(getColor(if (active) R.color.accent_light else R.color.text_muted))
+                        textSize = 14f
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    })
+                    addView(TextView(this@MainActivity).apply {
+                        setText(rtf)
+                        setTextAppearance(R.style.Voxl_Readout)
+                        setTextColor(getColor(if (active) R.color.accent_light else R.color.text_faint))
+                        textSize = 11f
+                    })
+                    if (note.isNotEmpty()) addView(TextView(this@MainActivity).apply {
+                        setText("  $note")
+                        setTextAppearance(R.style.Voxl_Readout)
+                        textSize = 10.5f
+                    })
+                    setOnClickListener { backend = b; rebuildBackends() }
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = (6 * dp).toInt() })
+            }
+        }
+        rebuildBackends()
+
+        val info = id<TableLayout>(R.id.devInfo)
+        info.removeAllViews()
+        for ((k, v) in listOf(
+            "기기" to "${Build.MODEL} · ${Build.HARDWARE}",
+            "모델" to if (modelsReady()) "설치됨 · int4" else "없음",
+            "등록 모델" to if (OmniVoiceEnroller.available(File(filesDir, "models"))) "있음" else "없음",
+            "네트워크" to "권한 없음",
+        )) info.addView(TableRow(this).apply { addView(cell(k, false)); addView(cell(v, true)) })
+    }
+
+    private fun segment(label: String, sub: String, active: Boolean, onClick: () -> Unit) =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            background = getDrawable(R.drawable.glass_card)
+            isSelected = active
+            val dp = resources.displayMetrics.density
+            setPadding((8 * dp).toInt(), (11 * dp).toInt(), (8 * dp).toInt(), (11 * dp).toInt())
+            addView(TextView(this@MainActivity).apply {
+                setText(label)
+                setTextAppearance(R.style.Voxl_Readout_Value)
+                setTextColor(getColor(if (active) R.color.accent_light else R.color.text))
+                textSize = 17f
+            })
+            addView(TextView(this@MainActivity).apply {
+                setText(sub)
+                setTextAppearance(R.style.Voxl_Readout)
+                setTextColor(getColor(if (active) R.color.accent_light else R.color.text_faint))
+                textSize = 10f
+            })
+            setOnClickListener { onClick() }
+        }
+
+    private fun segParams() = LinearLayout.LayoutParams(0,
+        ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+        marginEnd = (7 * resources.displayMetrics.density).toInt()
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
 
     override fun onStop() {
         super.onStop()
-        if (recorder.isRecording) recorder.cancel()
+        if (recorder.isRecording) cancelRecording()
         player.pause()
+        stopTicking()
     }
 
     override fun onDestroy() {
+        stopTicking()
         player.release()
         runCatching { unbindService(connection) }
         super.onDestroy()

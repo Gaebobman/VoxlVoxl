@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/screenVerify"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <TextView
+            style="@style/Voxl.Wordmark"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name" />
+
+        <TextView
+            style="@style/Voxl.Tag"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="@string/enroll_step2" />
+    </LinearLayout>
+
+    <Space android:layout_width="match_parent" android:layout_height="20dp" />
+
+    <TextView
+        style="@style/Voxl.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/verify_title" />
+
+    <Space android:layout_width="match_parent" android:layout_height="8dp" />
+
+    <TextView
+        style="@style/Voxl.Body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/verify_body" />
+
+    <Space android:layout_width="match_parent" android:layout_height="18dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/glass_panel"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <ai.omnivoice.poc.ui.WaveformView
+            android:id="@+id/verifyWave"
+            android:layout_width="match_parent"
+            android:layout_height="58dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/verifyPlay"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:background="@drawable/amber_button"
+                android:contentDescription="@string/verify_listen"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_play" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/pretendard"
+                    android:text="@string/verify_listen"
+                    android:textColor="@color/text"
+                    android:textFontWeight="500"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/verifyMeta"
+                    style="@style/Voxl.Readout"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <Space android:layout_width="match_parent" android:layout_height="14dp" />
+
+    <LinearLayout
+        android:id="@+id/verifyChecks"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <TextView
+        style="@style/Voxl.Caption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/glass_chip"
+        android:padding="14dp"
+        android:text="@string/verify_privacy" />
+
+    <Space android:layout_width="match_parent" android:layout_height="12dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/verifyAgain"
+            style="@style/Voxl.Button.Ghost"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:text="@string/verify_again" />
+
+        <Space android:layout_width="9dp" android:layout_height="1dp" />
+
+        <Button
+            android:id="@+id/verifyKeep"
+            style="@style/Voxl.Button"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:text="@string/verify_keep" />
+    </LinearLayout>
+</LinearLayout>

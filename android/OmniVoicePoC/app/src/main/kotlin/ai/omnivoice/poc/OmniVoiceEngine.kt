@@ -257,15 +257,20 @@ class OmniVoiceEngine(
             }
 
             var left = 0
+            val perCb = FloatArray(OV.NUM_CODEBOOKS)
             for (c in 0 until OV.NUM_CODEBOOKS) {
+                var filled = 0
                 for (t in 0 until tGen) {
                     inputIds[c][genStart + t] = tokens[c][t]
                     uIds[c][t] = tokens[c][t]
-                    if (tokens[c][t] == OV.AUDIO_MASK_ID.toLong()) left++
+                    if (tokens[c][t] == OV.AUDIO_MASK_ID.toLong()) left++ else filled++
                 }
+                perCb[c] = filled.toFloat() / tGen
             }
-            onProgress?.invoke(
-                SynthesisProgress(chunk, totalChunks, step + 1, cfg.numStep, left))
+            onProgress?.invoke(SynthesisProgress(
+                chunk, totalChunks, step + 1, cfg.numStep,
+                cellsRemaining = left, cellsTotal = tGen * OV.NUM_CODEBOOKS,
+                perCodebook = perCb))
         }
 
         var leftover = 0

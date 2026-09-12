@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/screenLibrary"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            style="@style/Voxl.Wordmark"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/app_name" />
+
+        <ImageButton
+            android:id="@+id/openDev"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/dev_title"
+            android:src="@drawable/ic_settings" />
+    </LinearLayout>
+
+    <Space android:layout_width="match_parent" android:layout_height="6dp" />
+
+    <TextView
+        style="@style/Voxl.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/voices_title" />
+
+    <Space android:layout_width="match_parent" android:layout_height="7dp" />
+
+    <TextView
+        style="@style/Voxl.Body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/voices_body" />
+
+    <Space android:layout_width="match_parent" android:layout_height="16dp" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/voiceList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <Space android:layout_width="match_parent" android:layout_height="12dp" />
+
+    <Button
+        android:id="@+id/addVoice"
+        style="@style/Voxl.Button.Ghost"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="@drawable/dashed_add"
+        android:text="@string/voices_add" />
+
+    <Space android:layout_width="match_parent" android:layout_height="12dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/glass_chip"
+        android:orientation="horizontal"
+        android:padding="15dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginTop="2dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_shield" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="11dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/pretendard"
+                android:text="@string/privacy_title"
+                android:textColor="@color/text"
+                android:textFontWeight="500"
+                android:textSize="12.5sp" />
+
+            <TextView
+                style="@style/Voxl.Caption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/privacy_body"
+                android:textSize="11.5sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <Space android:layout_width="match_parent" android:layout_height="10dp" />
+
+    <Button
+        android:id="@+id/goCompose"
+        style="@style/Voxl.Button"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="@string/compose_go" />
+</LinearLayout>

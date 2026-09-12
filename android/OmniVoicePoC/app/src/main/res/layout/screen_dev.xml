@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/screenDev"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:scrollbars="none"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/devBack"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="-8dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/gen_cancel"
+                android:src="@drawable/ic_back" />
+
+            <TextView
+                style="@style/Voxl.Wordmark"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="@string/dev_title" />
+        </LinearLayout>
+
+        <Space android:layout_width="match_parent" android:layout_height="20dp" />
+
+        <TextView style="@style/Voxl.Label" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/dev_steps" />
+
+        <LinearLayout
+            android:id="@+id/devSteps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="9dp"
+            android:orientation="horizontal" />
+
+        <TextView style="@style/Voxl.Caption" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginTop="9dp"
+            android:text="@string/dev_steps_note" android:textSize="11sp" />
+
+        <Space android:layout_width="match_parent" android:layout_height="20dp" />
+
+        <TextView style="@style/Voxl.Label" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/dev_backend" />
+
+        <LinearLayout
+            android:id="@+id/devBackends"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="9dp"
+            android:orientation="vertical" />
+
+        <TextView style="@style/Voxl.Caption" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginTop="9dp"
+            android:text="@string/dev_backend_note" android:textSize="11sp" />
+
+        <Space android:layout_width="match_parent" android:layout_height="20dp" />
+
+        <TextView style="@style/Voxl.Label" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="@string/dev_threads" />
+
+        <LinearLayout
+            android:id="@+id/devThreads"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="9dp"
+            android:orientation="horizontal" />
+
+        <TextView style="@style/Voxl.Caption" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginTop="9dp"
+            android:text="@string/dev_threads_note" android:textSize="11sp" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="20dp" />
+
+        <TableLayout
+            android:id="@+id/devInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/glass_chip"
+            android:padding="16dp"
+            android:stretchColumns="1" />
+    </LinearLayout>
+</ScrollView>

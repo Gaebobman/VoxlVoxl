@@ -1,19 +1,70 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">VoxlVoxl</string>
-    <string name="voice_label">Voice</string>
-    <string name="no_voice">(no voice — using voice design)</string>
-    <string name="record">Record</string>
-    <string name="stop_recording">Stop</string>
-    <string name="enroll_hint">Reference transcript — type exactly what you said</string>
-    <string name="enroll">Enroll voice</string>
-    <string name="target_hint">Text to speak</string>
-    <string name="generate">Generate</string>
-    <string name="cancel">Cancel</string>
-    <string name="play">Play</string>
-    <string name="pause">Pause</string>
-    <string name="replay">Replay</string>
-    <string name="save_wav">Save WAV</string>
-    <string name="delete_voice">Delete</string>
-    <string name="dev_settings">Developer settings</string>
+
+    <!-- first run -->
+    <string name="first_run_title">목소리 모델을\n기기에 설치합니다</string>
+    <string name="first_run_body">한 번만 받으면 그 뒤로는 인터넷 없이 동작합니다. 음성은 이 기기 밖으로 나가지 않습니다.</string>
+    <string name="first_run_skip_note">등록 모델을 건너뛰면 654 MB를 아끼는 대신, 이 기기에서 새 목소리를 등록할 수 없습니다.</string>
+    <string name="first_run_continue">계속</string>
+
+    <!-- voices -->
+    <string name="voices_title">내 목소리</string>
+    <string name="voices_body">말투마다 따로 등록하세요. 속삭임은 설정이 아니라 속삭이며 한 녹음입니다.</string>
+    <string name="voices_add">새 말투 등록</string>
+    <string name="voices_none">아직 등록된 목소리가 없습니다</string>
+    <string name="privacy_title">이 기기 밖으로 나가지 않습니다</string>
+    <string name="privacy_body">앱에 네트워크 권한 자체가 없습니다. 녹음 원본은 저장하지 않고, 목소리 하나가 1.8 kB의 숫자로만 남습니다.</string>
+    <string name="test">테스트</string>
+    <string name="rerecord">재녹음</string>
+    <string name="delete">삭제</string>
+
+    <!-- enroll -->
+    <string name="enroll_step1">등록 1/2</string>
+    <string name="enroll_step2">등록 2/2</string>
+    <string name="enroll_title">아래 문장을\n편하게 읽어주세요</string>
+    <string name="enroll_body">읽을 문장을 드리면 무엇을 말했는지 받아적지 않아도 됩니다. 받아적은 내용이 틀리면 목소리가 조용히 나빠집니다.</string>
+    <string name="enroll_own">내가 쓴 문장으로 녹음하기</string>
+    <string name="enroll_start">녹음 시작</string>
+    <string name="enroll_stop">녹음 끝내기</string>
+    <string name="enroll_min">3초 이상</string>
+    <string name="enroll_max">12초</string>
+    <string name="enroll_band">권장 구간</string>
+
+    <!-- verify -->
+    <string name="verify_title">이게 시스템이\n들은 소리입니다</string>
+    <string name="verify_body">녹음을 그대로 재생하는 게 아니라, 앞으로 모델이 참고하게 될 형태로 바꿨다가 되돌린 소리입니다. 여기서 이상하면 나중에도 이상합니다.</string>
+    <string name="verify_listen">들어보기</string>
+    <string name="verify_keep">이 목소리 저장</string>
+    <string name="verify_again">다시 녹음</string>
+    <string name="verify_privacy">녹음 원본은 저장하지 않습니다. 이 목소리는 1.8 kB의 숫자로만 남습니다.</string>
+
+    <!-- compose -->
+    <string name="compose_hint">말하게 할 내용</string>
+    <string name="compose_go">내 목소리로 만들기</string>
+    <string name="compose_batch">여러 문장을 한 번에 넣는 편이 빠릅니다 — 문장마다 나누면 총 시간이 약 2배</string>
+    <string name="no_voice">목소리 없이 (보이스 디자인)</string>
+
+    <!-- generating -->
+    <string name="gen_tag">만드는 중</string>
+    <string name="gen_ladder">낮은 층부터 차례로 채워집니다</string>
+    <string name="gen_cancel">취소</string>
+    <string name="gen_next">기다리는 동안 다음 문장</string>
+    <string name="gen_queue_hint">다음에 말할 내용…</string>
+    <string name="gen_thermal">기기가 따뜻해 평소보다 느립니다 — 식으면 약 2배 빨라집니다</string>
+
+    <!-- result -->
+    <string name="result_tag">완료</string>
+    <string name="save_wav">WAV 저장</string>
+    <string name="share">공유</string>
+    <string name="measured">측정값</string>
+
+    <!-- developer -->
+    <string name="dev_title">개발자 설정</string>
+    <string name="dev_steps">디코딩 단계</string>
+    <string name="dev_steps_note">16이 실측 무릎점입니다. 8은 품질이 모델 자체 샘플링 편차보다 더 떨어집니다.</string>
+    <string name="dev_backend">실행 백엔드</string>
+    <string name="dev_backend_note">가속기가 가져간 노드 0개. 연산의 85%가 int4 GEMM이고 어느 쪽도 구현하지 않습니다.</string>
+    <string name="dev_threads">스레드</string>
+    <string name="dev_threads_note">8은 6보다 느립니다 — 7·8번 스레드가 프라임 코어에 올라가 스텝 전체가 대기합니다.</string>
 </resources>

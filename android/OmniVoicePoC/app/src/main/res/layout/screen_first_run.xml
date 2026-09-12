@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/screenFirstRun"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:visibility="gone">
+
+    <TextView
+        style="@style/Voxl.Wordmark"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/app_name" />
+
+    <Space android:layout_width="match_parent" android:layout_height="26dp" />
+
+    <TextView
+        style="@style/Voxl.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/first_run_title" />
+
+    <Space android:layout_width="match_parent" android:layout_height="10dp" />
+
+    <TextView
+        style="@style/Voxl.Body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/first_run_body" />
+
+    <Space android:layout_width="match_parent" android:layout_height="22dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/glass_panel"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:gravity="bottom"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/installMb"
+                style="@style/Voxl.Readout.Large"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0" />
+
+            <TextView
+                android:id="@+id/installTotal"
+                style="@style/Voxl.Readout"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:paddingStart="6dp"
+                android:paddingBottom="3dp"
+                android:text="/ 1174 MB" />
+
+            <TextView
+                android:id="@+id/installEta"
+                style="@style/Voxl.Readout"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingBottom="3dp" />
+        </LinearLayout>
+
+        <Space android:layout_width="match_parent" android:layout_height="14dp" />
+
+        <ProgressBar
+            android:id="@+id/installProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:max="100"
+            android:progressDrawable="@drawable/progress_track" />
+
+        <Space android:layout_width="match_parent" android:layout_height="14dp" />
+
+        <TextView
+            android:id="@+id/installDetail"
+            style="@style/Voxl.Caption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <Space android:layout_width="match_parent" android:layout_height="14dp" />
+
+    <TextView
+        style="@style/Voxl.Caption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/glass_chip"
+        android:padding="14dp"
+        android:text="@string/first_run_skip_note" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <Button
+        android:id="@+id/installContinue"
+        style="@style/Voxl.Button.Ghost"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="@string/first_run_continue" />
+</LinearLayout>
