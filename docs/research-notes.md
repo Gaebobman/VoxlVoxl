@@ -417,6 +417,39 @@ requantize, and context-binary caching: a project, not a flag.
 
 ### 7.1 Approximate prefix KV cache — the largest remaining lever
 
+**State: exported, quality answered, speed not yet measured.**
+`models/onnx/int4_kv/omnivoice_lm_kv.onnx` carries `past_key`/`past_value` in and
+`present_key`/`present_value` out (28 layers × 8 heads × 128), opset 20, sharing
+the same 422 MB weight blob. `scripts/kvcache_probe.py` has the harness
+(`forward` / `parity` / `drift` / `wavdelta`).
+
+The quality half is already settled by the judge run that produced §5.1's table.
+Refreshing the cache **never** — the most aggressive setting — scores 2.8662
+against an uncached baseline of 2.8722, which is inside the seed spread:
+
+```
+kvr4      2.8558     refresh every 4 steps
+kvnever   2.8662     never refresh
+kvoff     2.8722     cache off (baseline)
+kvr2      2.9365
+kvr8      2.9632
+```
+
+Bidirectional attention makes the cached prefix a genuine approximation, and the
+approximation costs nothing measurable. So the open question is only whether it
+**pays**.
+
+**Two things to get right when measuring it.** The exported KV graph is at
+`accuracy_level=1`; the shipping graph is now at 4, so it must be levelled up
+first or the comparison is cache-vs-compute-path rather than cache-vs-no-cache.
+And the 2.25× figure below comes from a linear-in-S cost model fitted **before**
+§5.1. What a cache saves is weight and activation traffic, and the GEMM it
+competes against just got 2.3× faster — the same reversal that turned CFG fusion
+from 1.04× into 0.98× (§6.2). Expect less than the model says, and measure on
+the current shipping configuration, not the old one.
+
+
+
 §2 forbids a cache across the generated region. It does not forbid one over the
 prefix, which does not change. Trimming the reference prices the prefix
 directly:
