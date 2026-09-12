@@ -1,0 +1,1210 @@
+{
+ "cases": [
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "weight": 30.9
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "weight": 69.9
+  },
+  {
+   "text": "Hello, how are you today?",
+   "weight": 20.8
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "weight": 37.1
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "weight": 31.5
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "weight": 24.6
+  },
+  {
+   "text": "Привет, как дела?",
+   "weight": 14.4
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "weight": 18.2
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "weight": 12.8
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "weight": 41.5
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "weight": 25.3
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "weight": 37.9
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "weight": 26.2
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "weight": 21.0
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "weight": 29.1
+  },
+  {
+   "text": "",
+   "weight": 0
+  },
+  {
+   "text": "a",
+   "weight": 1.0
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "weight": 48.5
+  },
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 48
+  },
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 45
+  },
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 56
+  },
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 110
+  },
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 91
+  },
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 137
+  },
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 54
+  },
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 48
+  },
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 68
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 103
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 85
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 128
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 249
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 208
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 312
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 123
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 103
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 154
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 42
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 39
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 45
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 74
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 61
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 92
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 45
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 42
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 48
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 54
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 48
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 68
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 132
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 110
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 165
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 65
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 54
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 82
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 48
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 45
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 58
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 112
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 93
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 140
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 55
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 48
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 69
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 44
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 42
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 48
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 87
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 73
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 109
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 47
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 44
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 54
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 37
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 35
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 40
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 51
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 47
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 64
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 39
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 37
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 43
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 40
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 38
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 43
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 65
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 54
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 81
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 43
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 40
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 46
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 36
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 33
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 38
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 48
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 45
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 57
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 38
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 36
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 41
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 61
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 50
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 76
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 148
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 123
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 185
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 73
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 61
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 91
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 45
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 42
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 48
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 90
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 75
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 112
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 48
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 45
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 56
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 55
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 48
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 69
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 135
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 112
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 169
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 67
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 55
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 83
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 45
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 43
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 49
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 93
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 77
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 116
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 48
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 45
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 58
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 42
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 40
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 45
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 75
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 62
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 93
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 45
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 42
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 48
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 47
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 44
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 53
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 103
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 86
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 129
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 51
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 47
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 64
+  },
+  {
+   "text": "",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 1
+  },
+  {
+   "text": "",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 1
+  },
+  {
+   "text": "",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 1
+  },
+  {
+   "text": "",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 1
+  },
+  {
+   "text": "",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 1
+  },
+  {
+   "text": "",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 1
+  },
+  {
+   "text": "",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 1
+  },
+  {
+   "text": "",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 1
+  },
+  {
+   "text": "",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 1
+  },
+  {
+   "text": "a",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 15
+  },
+  {
+   "text": "a",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 14
+  },
+  {
+   "text": "a",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 16
+  },
+  {
+   "text": "a",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 20
+  },
+  {
+   "text": "a",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 19
+  },
+  {
+   "text": "a",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 22
+  },
+  {
+   "text": "a",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 16
+  },
+  {
+   "text": "a",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 15
+  },
+  {
+   "text": "a",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 17
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.0,
+   "frames": 71
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 1.2,
+   "frames": 59
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_frames": 103,
+   "speed": 0.8,
+   "frames": 89
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.0,
+   "frames": 173
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 1.2,
+   "frames": 144
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": "Hello, world.",
+   "ref_frames": 40,
+   "speed": 0.8,
+   "frames": 216
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.0,
+   "frames": 85
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 1.2,
+   "frames": 71
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": "",
+   "ref_frames": 0,
+   "speed": 0.8,
+   "frames": 107
+  }
+ ]
+}

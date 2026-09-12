@@ -247,6 +247,40 @@ def stage_e2e(args) -> bool:
     return ok
 
 
+def stage_prompt(args) -> bool:
+    """The ONNX-side prompt builder must produce byte-identical input_ids and
+    audio_mask to PyTorch's _prepare_inference_inputs. Everything downstream is
+    meaningless otherwise, and this is the part the Kotlin port reimplements."""
+    print("\n[prompt] ONNX prompt assembly vs PyTorch _prepare_inference_inputs")
+    from _common import VoicePrompt
+    from infer_onnx import QwenTokenizer, build_prompt
+
+    want_ids, want_am, _ = _golden_prompt()
+    vp = VoicePrompt.load(OUT / "golden" / "voice_prompt.bin")
+    text = (Path("sample/target.txt")).read_text(encoding="utf-8").strip()
+    tok = QwenTokenizer(UPSTREAM_DIR / "tokenizer.json")
+    T_gen = want_ids.shape[2] - want_am[0].sum()
+    T_gen = int(want_am[0].sum()) - vp.num_frames
+    got_ids, got_am, gen_start = build_prompt(
+        tok, text, vp.ref_text, vp.codes.astype(np.int64), T_gen, "ko", None, True)
+
+    ok_shape = got_ids.shape == want_ids.shape
+    ok_ids = ok_shape and bool((got_ids == want_ids).all())
+    ok_am = ok_shape and bool((got_am == want_am).all())
+    print(f"    shape {got_ids.shape} vs {want_ids.shape}   "
+          f"{'OK' if ok_shape else 'MISMATCH'}")
+    if ok_shape and not ok_ids:
+        diff = np.argwhere(got_ids != want_ids)
+        print(f"    first differing cell {diff[0].tolist()}: "
+              f"{got_ids[tuple(diff[0])]} vs {want_ids[tuple(diff[0])]} "
+              f"({len(diff)} cells differ)")
+    print(f"    input_ids identical  {'OK' if ok_ids else 'BAD'}")
+    print(f"    audio_mask identical {'OK' if ok_am else 'BAD'}")
+    ok = ok_ids and ok_am
+    print(f"    {'PASS' if ok else 'FAIL'}")
+    return ok
+
+
 def stage_judge(args) -> bool:
     """Score candidate outputs with the fp32 reference model, under the model's
     own training objective.
@@ -319,7 +353,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--stage", action="append",
-                    choices=["bidir", "lm", "codec", "dsp", "e2e", "judge", "all"],
+                    choices=["bidir", "lm", "codec", "dsp", "prompt", "e2e",
+                             "judge", "all"],
                     default=None)
     ap.add_argument("--lm", default=None, help="path to omnivoice_lm.onnx")
     ap.add_argument("--wav", default=None)
@@ -327,13 +362,13 @@ def main() -> None:
     args = ap.parse_args()
     stages = args.stage or ["all"]
     if "all" in stages:
-        stages = ["bidir", "lm", "codec", "dsp", "e2e", "judge"]
+        stages = ["prompt", "bidir", "lm", "codec", "dsp", "e2e", "judge"]
 
     results = {}
     for s in stages:
         results[s] = {"bidir": stage_bidir, "lm": stage_lm, "codec": stage_codec,
                       "dsp": stage_dsp, "e2e": stage_e2e,
-                      "judge": stage_judge}[s](args)
+                      "prompt": stage_prompt, "judge": stage_judge}[s](args)
 
     print("\n=== summary ===")
     for k, v in results.items():

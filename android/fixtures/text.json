@@ -1,0 +1,328 @@
+{
+ "cases": [
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": null,
+   "combined": "오늘 회의를 시작하겠습니다.",
+   "punctuated": "오늘 회의를 시작하겠습니다."
+  },
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. 오늘 회의를 시작하겠습니다.",
+   "punctuated": "오늘 회의를 시작하겠습니다."
+  },
+  {
+   "text": "오늘 회의를 시작하겠습니다.",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence 오늘 회의를 시작하겠습니다.",
+   "punctuated": "오늘 회의를 시작하겠습니다."
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": null,
+   "combined": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "punctuated": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다."
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. 안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "punctuated": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다."
+  },
+  {
+   "text": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence 안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.",
+   "punctuated": "안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다."
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": null,
+   "combined": "Hello, how are you today?",
+   "punctuated": "Hello, how are you today?"
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. Hello, how are you today?",
+   "punctuated": "Hello, how are you today?"
+  },
+  {
+   "text": "Hello, how are you today?",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence Hello, how are you today?",
+   "punctuated": "Hello, how are you today?"
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": null,
+   "combined": "The quick brown fox jumps over the lazy dog.",
+   "punctuated": "The quick brown fox jumps over the lazy dog."
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. The quick brown fox jumps over the lazy dog.",
+   "punctuated": "The quick brown fox jumps over the lazy dog."
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog.",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence The quick brown fox jumps over the lazy dog.",
+   "punctuated": "The quick brown fox jumps over the lazy dog."
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": null,
+   "combined": "你好，世界！今天天气很好。",
+   "punctuated": "你好，世界！今天天气很好。"
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다.你好，世界！今天天气很好。",
+   "punctuated": "你好，世界！今天天气很好。"
+  },
+  {
+   "text": "你好，世界！今天天气很好。",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence你好，世界！今天天气很好。",
+   "punctuated": "你好，世界！今天天气很好。"
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": null,
+   "combined": "こんにちは、元気ですか？",
+   "punctuated": "こんにちは、元気ですか？"
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. こんにちは、元気ですか？",
+   "punctuated": "こんにちは、元気ですか？"
+  },
+  {
+   "text": "こんにちは、元気ですか？",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence こんにちは、元気ですか？",
+   "punctuated": "こんにちは、元気ですか？"
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": null,
+   "combined": "Привет, как дела?",
+   "punctuated": "Привет, как дела?"
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. Привет, как дела?",
+   "punctuated": "Привет, как дела?"
+  },
+  {
+   "text": "Привет, как дела?",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence Привет, как дела?",
+   "punctuated": "Привет, как дела?"
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": null,
+   "combined": "مرحبا بالعالم",
+   "punctuated": "مرحبا بالعالم."
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. مرحبا بالعالم",
+   "punctuated": "مرحبا بالعالم."
+  },
+  {
+   "text": "مرحبا بالعالم",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence مرحبا بالعالم",
+   "punctuated": "مرحبا بالعالم."
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": null,
+   "combined": "नमस्ते दुनिया",
+   "punctuated": "नमस्ते दुनिया."
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. नमस्ते दुनिया",
+   "punctuated": "नमस्ते दुनिया."
+  },
+  {
+   "text": "नमस्ते दुनिया",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence नमस्ते दुनिया",
+   "punctuated": "नमस्ते दुनिया."
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": null,
+   "combined": "Mixed 한국어 and English 123 numbers.",
+   "punctuated": "Mixed 한국어 and English 123 numbers."
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. Mixed 한국어 and English 123 numbers.",
+   "punctuated": "Mixed 한국어 and English 123 numbers."
+  },
+  {
+   "text": "Mixed 한국어 and English 123 numbers.",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence Mixed 한국어 and English 123 numbers.",
+   "punctuated": "Mixed 한국어 and English 123 numbers."
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": null,
+   "combined": "Emoji test 🌍 and punctuation!?",
+   "punctuated": "Emoji test 🌍 and punctuation!?"
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. Emoji test 🌍 and punctuation!?",
+   "punctuated": "Emoji test 🌍 and punctuation!?"
+  },
+  {
+   "text": "Emoji test 🌍 and punctuation!?",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence Emoji test 🌍 and punctuation!?",
+   "punctuated": "Emoji test 🌍 and punctuation!?"
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": null,
+   "combined": "[laughter] That was funny [sigh] but also sad.",
+   "punctuated": "[laughter] That was funny [sigh] but also sad."
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. [laughter] That was funny [sigh] but also sad.",
+   "punctuated": "[laughter] That was funny [sigh] but also sad."
+  },
+  {
+   "text": "[laughter] That was funny [sigh] but also sad.",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence [laughter] That was funny [sigh] but also sad.",
+   "punctuated": "[laughter] That was funny [sigh] but also sad."
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": null,
+   "combined": "leading and trailing spaces",
+   "punctuated": "leading and trailing   spaces."
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. leading and trailing spaces",
+   "punctuated": "leading and trailing   spaces."
+  },
+  {
+   "text": "   leading and trailing   spaces   ",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence leading and trailing spaces",
+   "punctuated": "leading and trailing   spaces."
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": null,
+   "combined": "linebreaksand tabs",
+   "punctuated": "line\nbreaks\r\nand\ttabs."
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. linebreaksand tabs",
+   "punctuated": "line\nbreaks\r\nand\ttabs."
+  },
+  {
+   "text": "line\nbreaks\r\nand\ttabs",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence linebreaksand tabs",
+   "punctuated": "line\nbreaks\r\nand\ttabs."
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": null,
+   "combined": "(중국식 괄호)and (english ones)",
+   "punctuated": "（중국식 괄호）and (english ones)."
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. (중국식 괄호)and (english ones)",
+   "punctuated": "（중국식 괄호）and (english ones)."
+  },
+  {
+   "text": "（중국식 괄호）and (english ones)",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence (중국식 괄호)and (english ones)",
+   "punctuated": "（중국식 괄호）and (english ones)."
+  },
+  {
+   "text": "",
+   "ref_text": null,
+   "combined": "",
+   "punctuated": "."
+  },
+  {
+   "text": "",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. ",
+   "punctuated": "."
+  },
+  {
+   "text": "",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence ",
+   "punctuated": "."
+  },
+  {
+   "text": "a",
+   "ref_text": null,
+   "combined": "a",
+   "punctuated": "a."
+  },
+  {
+   "text": "a",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. a",
+   "punctuated": "a."
+  },
+  {
+   "text": "a",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence a",
+   "punctuated": "a."
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": null,
+   "combined": "숫자 2345 와 3.14 그리고 50%",
+   "punctuated": "숫자 2345 와 3.14 그리고 50%."
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": "안녕하세요. 테스트입니다.",
+   "combined": "안녕하세요. 테스트입니다. 숫자 2345 와 3.14 그리고 50%",
+   "punctuated": "숫자 2345 와 3.14 그리고 50%."
+  },
+  {
+   "text": "숫자 2345 와 3.14 그리고 50%",
+   "ref_text": "Reference sentence",
+   "combined": "Reference sentence 숫자 2345 와 3.14 그리고 50%",
+   "punctuated": "숫자 2345 와 3.14 그리고 50%."
+  }
+ ]
+}
