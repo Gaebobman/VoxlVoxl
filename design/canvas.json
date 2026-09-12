@@ -1,0 +1,30 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Screens" },
+    { "id": "page-2", "name": "Directions" }
+  ],
+  "artboards": [
+    { "file": "FirstRun.dc.html",      "x": 0,    "y": 0, "w": 390, "h": 844, "page": "page-1", "title": "0 · First run" },
+    { "file": "EnrollRead.dc.html",    "x": 480,  "y": 0, "w": 390, "h": 844, "page": "page-1", "title": "1 · Enroll — read" },
+    { "file": "EnrollVerify.dc.html",  "x": 960,  "y": 0, "w": 390, "h": 844, "page": "page-1", "title": "2 · Enroll — verify" },
+    { "file": "Library.dc.html",       "x": 1440, "y": 0, "w": 390, "h": 844, "page": "page-1", "title": "3 · Voices" },
+    { "file": "Compose.dc.html",       "x": 1920, "y": 0, "w": 390, "h": 844, "page": "page-1", "title": "4 · Compose" },
+    { "file": "Main.dc.html",          "x": 2400, "y": 0, "w": 390, "h": 844, "page": "page-1", "title": "5 · Generating" },
+    { "file": "Result.dc.html",        "x": 2880, "y": 0, "w": 390, "h": 844, "page": "page-1", "title": "6 · Result" },
+    { "file": "DevSettings.dc.html",   "x": 3360, "y": 0, "w": 390, "h": 844, "page": "page-1", "title": "7 · Developer" },
+    { "file": "AltInstrument.dc.html", "x": 0,    "y": 0, "w": 390, "h": 844, "page": "page-2", "title": "A · Instrument" },
+    { "file": "AltCalm.dc.html",       "x": 480,  "y": 0, "w": 390, "h": 844, "page": "page-2", "title": "B · Quiet utility" },
+    { "file": "AltDense.dc.html",      "x": 960,  "y": 0, "w": 390, "h": 844, "page": "page-2", "title": "C · Console" }
+  ],
+  "annotations": [
+    { "id": "note-enroll", "x": 480, "y": -230, "w": 870,
+      "text": "Enrollment, rebuilt around the two things that actually go wrong.\n\n1) THE TRANSCRIPT IS THE SILENT FAILURE. It gets concatenated ahead of your target text and is what aligns the reference; get it wrong and the voice quietly degrades with no error. So the app hands you a sentence to read instead of asking you to transcribe yourself. Free-form recording stays, one tap away.\n\n2) VERIFICATION USED TO COST A FULL GENERATION. The spec asks for a test sentence right after enrolling — that is ~20 s on top of the recording. Screen 2 instead decodes the enrolled codes straight back through the vocoder: measured on the S26 Ultra at 2060 ms cold, ~0.5 s once the app is warm. And it is more diagnostic, because that IS the sound the model will use as its reference — clipping, over-trimming and bad levels are all audible in it." },
+    { "id": "note-generating", "x": 2400, "y": -200, "w": 870,
+      "text": "The wait is the product, so it gets the instrument.\n\nThe eight bars are the model's real state: the un-masking loop penalises higher codebooks, so layer 0 resolves first and 7 last. The staircase is honest.\n\nAnd the wait is no longer dead time — the composer stays reachable and lines queue up behind the one being made. That matters because short utterances cost roughly 2x per second of audio (the reference prefix is re-paid at every forward), so batching is both faster and what the UI should encourage." },
+    { "id": "note-style", "x": 1440, "y": -200, "w": 390,
+      "text": "Style is a PROFILE, not a setting.\n\nMeasured: a voice-design instruct is ignored whenever a clone prompt is present — every style landed within +-9 Hz of baseline F0.\n\nBut manner transfers through the recording (whisper: voiced 20.3% -> 24.1%). So 'whisper' is a second enrollment. Test / Re-record / Delete live on each card, per spec 6." },
+    { "id": "note-alts", "x": 0, "y": -240, "w": 1350, "page": "page-2",
+      "text": "Three directions not taken, with their tradeoffs.\n\nA INSTRUMENT is the real rival: opaque and high-contrast, so small Hangul and the numeric readout are easier to read, and it spends zero GPU — which matters when a warm device already runs ~2x slower. It just looks like a tool, and a product about voice has no voice on screen.\n\nB QUIET UTILITY hides the machine behind a spinner, which cannot survive 20-80 s: no visible progress reads as broken.\n\nC CONSOLE shows everything and stops being a product.\n\nThe shipped direction takes A's numbers and gives them a housing a non-engineer can read." }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

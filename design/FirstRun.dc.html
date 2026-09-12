@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+/*@FONT@*/
+    body { margin: 0; font-family: Pretendard, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #FFC98A; text-decoration: none; } a:hover { color: #FFE0BC; }
+    * { box-sizing: border-box; }
+    .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #0A0910; color: #F6F1EA;">
+  <div style="position: absolute; inset: 0; background: radial-gradient(120% 60% at 15% 12%, rgba(237,161,63,0.42) 0%, rgba(237,161,63,0) 60%),radial-gradient(90% 50% at 88% 30%, rgba(196,84,168,0.34) 0%, rgba(196,84,168,0) 62%),radial-gradient(110% 55% at 50% 92%, rgba(70,120,210,0.30) 0%, rgba(70,120,210,0) 60%), #0A0910;"></div>
+  <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,9,16,0.38) 0%, rgba(10,9,16,0.58) 46%, rgba(10,9,16,0.84) 100%);"></div>
+  <div style="position: relative; height: 100%; display: flex; flex-direction: column; padding: 20px;">
+    <div style="display: flex; align-items: baseline; gap: 8px;">
+      <div style="font-size: 17px; font-weight: 600; letter-spacing: -0.3px;">VoxlVoxl</div>
+      
+    </div>
+    <div style="height: 26px;"></div>
+    <div style="font-size: 24px; font-weight: 600; line-height: 1.35; letter-spacing: -0.4px;">목소리 모델을<br>기기에 설치합니다</div>
+    <div style="height: 10px;"></div>
+    <div style="font-size: 14px; line-height: 1.6; color: rgba(246,241,234,0.66);">한 번만 받으면 그 뒤로는 인터넷 없이 동작합니다. 음성은 이 기기 밖으로 나가지 않습니다.</div>
+
+    <div style="height: 22px;"></div>
+    <div style="border-radius: 18px; padding: 18px; background: linear-gradient(160deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);border: 1px solid rgba(255,255,255,0.17);box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 14px 40px rgba(0,0,0,0.40);backdrop-filter: blur(32px) saturate(150%); display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; align-items: flex-end; gap: 8px;">
+        <div class="num" style="font-size: 34px; font-weight: 600; line-height: 0.9; letter-spacing: -1px;">712</div>
+        <div class="num" style="font-size: 14px; color: rgba(246,241,234,0.60); padding-bottom: 3px;">/ 1174 MB</div>
+        <div style="flex-grow: 1;"></div>
+        <div class="num" style="font-size: 13px; color: rgba(246,241,234,0.70);">약 40초 남음</div>
+      </div>
+      <div style="height: 6px; border-radius: 3px; background: rgba(255,255,255,0.10); overflow: hidden;">
+        <div style="width: 61%; height: 100%; background: linear-gradient(90deg,#FFD29A,#EDA13F);"></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 9px;">
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8FD6A0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+          <div style="font-size: 13px; color: rgba(246,241,234,0.82);">음성 합성 모델</div>
+          <div style="flex-grow: 1;"></div><div class="num" style="font-size: 12px; color: rgba(246,241,234,0.45);">422 MB</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8FD6A0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+          <div style="font-size: 13px; color: rgba(246,241,234,0.82);">보코더 · 토크나이저</div>
+          <div style="flex-grow: 1;"></div><div class="num" style="font-size: 12px; color: rgba(246,241,234,0.45);">98 MB</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <div style="width: 15px; height: 15px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.22); border-top-color: #EDA13F;"></div>
+          <div style="font-size: 13px;">목소리 등록 모델</div>
+          <div style="flex-grow: 1;"></div><div class="num" style="font-size: 12px; color: rgba(246,241,234,0.60);">192 / 654 MB</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height: 14px;"></div>
+    <div style="padding: 13px 15px; border-radius: 14px; background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.14);backdrop-filter: blur(18px); display: flex; gap: 10px; align-items: flex-start;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(246,241,234,0.55)" stroke-width="1.8" stroke-linecap="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.6v.1"/></svg>
+      <div style="font-size: 12px; line-height: 1.55; color: rgba(246,241,234,0.66);">등록 모델을 건너뛰면 654 MB를 아끼는 대신, 이 기기에서 새 목소리를 등록할 수 없습니다.</div>
+    </div>
+
+    <div style="flex-grow: 1;"></div>
+    <div style="height: 52px; border-radius: 26px; background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.14);backdrop-filter: blur(18px); display: flex; align-items: center; justify-content: center;">
+      <div style="font-size: 15px; font-weight: 500; color: rgba(246,241,234,0.80);">등록 모델 건너뛰기</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

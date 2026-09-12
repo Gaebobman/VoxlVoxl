@@ -36,3 +36,7 @@ scratch/
 # gradle wrapper jar is intentionally tracked; everything else gradle generates is not
 android/OmniVoicePoC/.kotlin/
 android/OmniVoicePoC/build/
+
+# design canvas: the seeded page and the font-injected staging are both derived
+design/voxlvoxl-app.html
+design/build/

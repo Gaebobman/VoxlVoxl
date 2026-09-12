@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+/*@FONT@*/
+    body { margin: 0; font-family: Pretendard, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #FFC98A; text-decoration: none; } a:hover { color: #FFE0BC; }
+    * { box-sizing: border-box; }
+    .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  </style>
+</helmet>
+
+<!-- Direction A — INSTRUMENT. Opaque, high contrast, numbers first. -->
+<div style="width: 390px; height: 844px; background: #0E0D0B; color: #F3EFE9; display: flex; flex-direction: column; padding: 20px;">
+  <div style="display: flex; align-items: baseline; gap: 8px;">
+    <div style="font-size: 17px; font-weight: 600; letter-spacing: -0.3px;">VoxlVoxl</div>
+    <div class="num" style="font-size: 11px; color: #EDA13F;">만드는 중</div>
+  </div>
+  <div style="height: 14px;"></div>
+  <div style="font-size: 14px; line-height: 1.55; color: #CFC8BE; text-wrap: pretty;">오늘 회의를 시작하겠습니다. 먼저 지난주에 논의했던 일정부터 정리하겠습니다.</div>
+  <div style="height: 16px;"></div>
+
+  <div style="padding: 18px; background: #181613; border: 1px solid #2C2823; border-radius: 10px; display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; align-items: flex-end; gap: 9px;">
+      <div class="num" style="font-size: 44px; font-weight: 600; line-height: 0.9; letter-spacing: -1.6px;">38</div>
+      <div class="num" style="font-size: 15px; color: #978F85; padding-bottom: 4px;">초 남음</div>
+      <div style="flex-grow: 1;"></div>
+      <div style="text-align: right; display: flex; flex-direction: column; gap: 3px;">
+        <div class="num" style="font-size: 13px;">9 / 16 단계</div>
+        <div class="num" style="font-size: 11px; color: #978F85;">289 / 384 칸</div>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 5px;"><div style="display:flex;align-items:center;gap:8px;"><div class="num" style="font-size:9px;color:#6E675E;width:9px;">0</div><div style="flex-grow:1;height:7px;border-radius:2px;background:#26221C;overflow:hidden;"><div style="width:96%;height:100%;background:#EDA13F;"></div></div></div><div style="display:flex;align-items:center;gap:8px;"><div class="num" style="font-size:9px;color:#6E675E;width:9px;">1</div><div style="flex-grow:1;height:7px;border-radius:2px;background:#26221C;overflow:hidden;"><div style="width:88%;height:100%;background:#EDA13F;"></div></div></div><div style="display:flex;align-items:center;gap:8px;"><div class="num" style="font-size:9px;color:#6E675E;width:9px;">2</div><div style="flex-grow:1;height:7px;border-radius:2px;background:#26221C;overflow:hidden;"><div style="width:74%;height:100%;background:#D9913A;"></div></div></div><div style="display:flex;align-items:center;gap:8px;"><div class="num" style="font-size:9px;color:#6E675E;width:9px;">3</div><div style="flex-grow:1;height:7px;border-radius:2px;background:#26221C;overflow:hidden;"><div style="width:61%;height:100%;background:#C58334;"></div></div></div><div style="display:flex;align-items:center;gap:8px;"><div class="num" style="font-size:9px;color:#6E675E;width:9px;">4</div><div style="flex-grow:1;height:7px;border-radius:2px;background:#26221C;overflow:hidden;"><div style="width:47%;height:100%;background:#B0752E;"></div></div></div><div style="display:flex;align-items:center;gap:8px;"><div class="num" style="font-size:9px;color:#6E675E;width:9px;">5</div><div style="flex-grow:1;height:7px;border-radius:2px;background:#26221C;overflow:hidden;"><div style="width:35%;height:100%;background:#9C6729;"></div></div></div><div style="display:flex;align-items:center;gap:8px;"><div class="num" style="font-size:9px;color:#6E675E;width:9px;">6</div><div style="flex-grow:1;height:7px;border-radius:2px;background:#26221C;overflow:hidden;"><div style="width:22%;height:100%;background:#875923;"></div></div></div><div style="display:flex;align-items:center;gap:8px;"><div class="num" style="font-size:9px;color:#6E675E;width:9px;">7</div><div style="flex-grow:1;height:7px;border-radius:2px;background:#26221C;overflow:hidden;"><div style="width:14%;height:100%;background:#734B1E;"></div></div></div></div>
+    <div class="num" style="font-size: 10px; color: #6E675E;">낮은 층부터 차례로 채워집니다</div>
+  </div>
+
+  <div style="height: 16px;"></div>
+  <div style="height: 52px; border-radius: 8px; border: 1px solid #45403A; display: flex; align-items: center; justify-content: center; gap: 8px;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#CFC8BE" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    <div style="font-size: 15px; font-weight: 500; color: #CFC8BE;">취소</div>
+  </div>
+
+  <div style="flex-grow: 1;"></div>
+
+  <div style="display: flex; flex-direction: column; gap: 7px;">
+    <div style="font-size: 12px; font-weight: 600;">왜 이 방향인가</div>
+    <div style="font-size: 12px; color: #978F85; line-height: 1.55;">불투명 · 고대비. 작은 한글과 수치 판독부가 가장 잘 읽힙니다. GPU를 전혀 쓰지 않아 발열 예산을 합성에 다 씁니다.</div>
+    <div style="height: 4px;"></div>
+    <div style="font-size: 12px; font-weight: 600; color: #C98A5A;">대가</div>
+    <div style="font-size: 12px; color: #978F85; line-height: 1.55;">공구처럼 보입니다. 목소리를 다루는 제품인데 화면에 목소리가 없습니다.</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

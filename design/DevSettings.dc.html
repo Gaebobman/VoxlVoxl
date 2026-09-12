@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+/*@FONT@*/
+    body { margin: 0; font-family: Pretendard, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #FFC98A; text-decoration: none; } a:hover { color: #FFE0BC; }
+    * { box-sizing: border-box; }
+    .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #0A0910; color: #F6F1EA;">
+  <div style="position: absolute; inset: 0; background: radial-gradient(120% 60% at 15% 12%, rgba(237,161,63,0.42) 0%, rgba(237,161,63,0) 60%),radial-gradient(90% 50% at 88% 30%, rgba(196,84,168,0.34) 0%, rgba(196,84,168,0) 62%),radial-gradient(110% 55% at 50% 92%, rgba(70,120,210,0.30) 0%, rgba(70,120,210,0) 60%), #0A0910;"></div>
+  <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,9,16,0.38) 0%, rgba(10,9,16,0.58) 46%, rgba(10,9,16,0.84) 100%);"></div>
+  <div style="position: relative; height: 100%; display: flex; flex-direction: column; padding: 20px;">
+    <div style="display: flex; align-items: center; gap: 11px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F6F1EA" stroke-width="1.8" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg>
+      <div style="font-size: 17px; font-weight: 600; letter-spacing: -0.3px;">개발자 설정</div>
+    </div>
+    <div style="height: 20px;"></div>
+
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <div class="num" style="font-size: 10px; letter-spacing: 0.8px; color: rgba(246,241,234,0.42);">디코딩 단계</div>
+      <div style="display: flex; gap: 7px;"><div style="flex-grow:1;padding:11px 8px;border-radius:12px;background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);backdrop-filter:blur(18px);display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="num" style="font-size:17px;font-weight:600;color:rgba(246,241,234,0.72);">8</div><div class="num" style="font-size:10px;color:rgba(246,241,234,0.42);">5.4×</div></div><div style="flex-grow:1;padding:11px 8px;border-radius:12px;background: linear-gradient(160deg, rgba(237,161,63,0.22) 0%, rgba(237,161,63,0.06) 100%);border: 1px solid rgba(237,161,63,0.55);backdrop-filter:blur(18px);display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="num" style="font-size:17px;font-weight:600;color:#FFC98A;">16</div><div class="num" style="font-size:10px;color:rgba(255,201,138,0.75);">11.2×</div></div><div style="flex-grow:1;padding:11px 8px;border-radius:12px;background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);backdrop-filter:blur(18px);display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="num" style="font-size:17px;font-weight:600;color:rgba(246,241,234,0.72);">32</div><div class="num" style="font-size:10px;color:rgba(246,241,234,0.42);">24.6×</div></div></div>
+      <div style="font-size: 11px; line-height: 1.5; color: rgba(246,241,234,0.45);">16이 실측 무릎점입니다. 8은 품질이 모델 자체 샘플링 편차보다 더 떨어집니다.</div>
+    </div>
+
+    <div style="height: 20px;"></div>
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <div class="num" style="font-size: 10px; letter-spacing: 0.8px; color: rgba(246,241,234,0.42);">실행 백엔드</div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="padding:13px 15px;border-radius:13px;background: linear-gradient(160deg, rgba(237,161,63,0.20) 0%, rgba(237,161,63,0.05) 100%);border: 1px solid rgba(237,161,63,0.50);backdrop-filter:blur(18px);display:flex;align-items:center;gap:10px;"><div style="font-size:14px;color:#FFC98A;">CPU</div><div style="flex-grow:1;"></div><div class="num" style="font-size:11px;color:#FFC98A;">11.06×</div><div class="num" style="font-size:10.5px;color:rgba(246,241,234,0.38);"></div></div>
+        <div style="padding:13px 15px;border-radius:13px;background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10);backdrop-filter:blur(18px);display:flex;align-items:center;gap:10px;"><div style="font-size:14px;color:rgba(246,241,234,0.62);">XNNPACK</div><div style="flex-grow:1;"></div><div class="num" style="font-size:11px;color:rgba(246,241,234,0.62);">12.46×</div><div class="num" style="font-size:10.5px;color:rgba(246,241,234,0.38);">0 노드</div></div>
+        <div style="padding:13px 15px;border-radius:13px;background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10);backdrop-filter:blur(18px);display:flex;align-items:center;gap:10px;"><div style="font-size:14px;color:rgba(246,241,234,0.62);">NNAPI</div><div style="flex-grow:1;"></div><div class="num" style="font-size:11px;color:rgba(246,241,234,0.62);">12.94×</div><div class="num" style="font-size:10.5px;color:rgba(246,241,234,0.38);">0 노드</div></div>
+      </div>
+      <div style="font-size: 11px; line-height: 1.5; color: rgba(246,241,234,0.45);">가속기가 가져간 노드 0개. 연산의 85%가 int4 GEMM이고 어느 쪽도 구현하지 않습니다.</div>
+    </div>
+
+    <div style="height: 20px;"></div>
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <div class="num" style="font-size: 10px; letter-spacing: 0.8px; color: rgba(246,241,234,0.42);">스레드</div>
+      <div style="display: flex; gap: 6px;"><div style="flex-grow:1;padding:11px 8px;border-radius:12px;background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);backdrop-filter:blur(18px);display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="num" style="font-size:17px;font-weight:600;color:rgba(246,241,234,0.72);">1</div><div class="num" style="font-size:10px;color:rgba(246,241,234,0.42);">38.2×</div></div><div style="flex-grow:1;padding:11px 8px;border-radius:12px;background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);backdrop-filter:blur(18px);display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="num" style="font-size:17px;font-weight:600;color:rgba(246,241,234,0.72);">2</div><div class="num" style="font-size:10px;color:rgba(246,241,234,0.42);">22.2×</div></div><div style="flex-grow:1;padding:11px 8px;border-radius:12px;background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);backdrop-filter:blur(18px);display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="num" style="font-size:17px;font-weight:600;color:rgba(246,241,234,0.72);">4</div><div class="num" style="font-size:10px;color:rgba(246,241,234,0.42);">13.9×</div></div><div style="flex-grow:1;padding:11px 8px;border-radius:12px;background: linear-gradient(160deg, rgba(237,161,63,0.22) 0%, rgba(237,161,63,0.06) 100%);border: 1px solid rgba(237,161,63,0.55);backdrop-filter:blur(18px);display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="num" style="font-size:17px;font-weight:600;color:#FFC98A;">6</div><div class="num" style="font-size:10px;color:rgba(255,201,138,0.75);">11.6×</div></div><div style="flex-grow:1;padding:11px 8px;border-radius:12px;background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);backdrop-filter:blur(18px);display:flex;flex-direction:column;align-items:center;gap:3px;"><div class="num" style="font-size:17px;font-weight:600;color:rgba(246,241,234,0.72);">8</div><div class="num" style="font-size:10px;color:rgba(246,241,234,0.42);">17.3×</div></div></div>
+      <div style="font-size: 11px; line-height: 1.5; color: rgba(246,241,234,0.45);">8은 6보다 느립니다 — 7·8번 스레드가 프라임 코어에 올라가 스텝 전체가 대기합니다.</div>
+    </div>
+
+    <div style="flex-grow: 1;"></div>
+    <div style="border-radius: 14px; padding: 14px 16px; background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.14); backdrop-filter: blur(18px); display: flex; flex-direction: column; gap: 7px;">
+      <div style="display:flex;justify-content:space-between;"><span class="num" style="font-size:11px;color:rgba(246,241,234,0.42);">기기</span><span class="num" style="font-size:11px;color:rgba(246,241,234,0.82);">SM-S948N · SM8850</span></div>
+      <div style="display:flex;justify-content:space-between;"><span class="num" style="font-size:11px;color:rgba(246,241,234,0.42);">모델</span><span class="num" style="font-size:11px;color:rgba(246,241,234,0.82);">1174 MB · int4</span></div>
+      <div style="display:flex;justify-content:space-between;"><span class="num" style="font-size:11px;color:rgba(246,241,234,0.42);">네트워크</span><span class="num" style="font-size:11px;color:rgba(246,241,234,0.82);">권한 없음</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

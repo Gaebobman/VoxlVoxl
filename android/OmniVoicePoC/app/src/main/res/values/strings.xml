@@ -1,4 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OmniVoice PoC</string>
+    <string name="app_name">VoxlVoxl</string>
+    <string name="voice_label">Voice</string>
+    <string name="no_voice">(no voice — using voice design)</string>
+    <string name="record">Record</string>
+    <string name="stop_recording">Stop</string>
+    <string name="enroll_hint">Reference transcript — type exactly what you said</string>
+    <string name="enroll">Enroll voice</string>
+    <string name="target_hint">Text to speak</string>
+    <string name="generate">Generate</string>
+    <string name="cancel">Cancel</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="replay">Replay</string>
+    <string name="save_wav">Save WAV</string>
+    <string name="delete_voice">Delete</string>
+    <string name="dev_settings">Developer settings</string>
 </resources>

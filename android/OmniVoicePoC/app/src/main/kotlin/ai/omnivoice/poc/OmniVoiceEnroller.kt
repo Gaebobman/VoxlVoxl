@@ -200,6 +200,27 @@ class OmniVoiceEnroller(
         }
     }
 
+    /**
+     * Decodes a profile's codes straight back to audio — what the model will
+     * actually hear as its reference.
+     *
+     * The spec (§6) asks for a test sentence right after enrolling, but that is a
+     * full generation: ~20 s on top of the recording. This is the same evidence
+     * for a fraction of the cost, and it is strictly more diagnostic, because a
+     * clipped recording, an over-trimmed one or a bad level are all audible here
+     * while a test sentence only tells you the voice sounds odd.
+     *
+     * Measured on the S26 Ultra: 2060 ms including a cold vocoder session open,
+     * so roughly half a second once the app is warm. A test synthesis stays
+     * available as the next step, not the first one.
+     */
+    fun echo(profile: VoiceProfile, threads: Int = this.threads): FloatArray {
+        val codes = Array(OV.NUM_CODEBOOKS) { c ->
+            LongArray(profile.frames) { t -> profile.codes[c][t].toLong() }
+        }
+        return OnnxModelRunner(modelDir, Backend.CPU, threads).use { it.decodeCodes(codes) }
+    }
+
     override fun close() {
         sessions.values.forEach { runCatching { it.close() } }
         sessions.clear()

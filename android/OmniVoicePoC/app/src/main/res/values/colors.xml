@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokens from the design canvas. Warm near-black ground, one amber accent,
+     red reserved for recording, green only for "this is verified". -->
+<resources>
+    <color name="ground">#0A0910</color>
+    <color name="glass_fill">#26FFFFFF</color>
+    <color name="glass_fill_soft">#17FFFFFF</color>
+    <color name="glass_stroke">#2BFFFFFF</color>
+    <color name="text">#F6F1EA</color>
+    <color name="text_muted">#9EF6F1EA</color>
+    <color name="text_faint">#6BF6F1EA</color>
+    <color name="accent">#EDA13F</color>
+    <color name="accent_light">#FFC98A</color>
+    <color name="accent_ink">#241705</color>
+    <color name="rec">#FF7A6B</color>
+    <color name="ok">#8FD6A0</color>
+</resources>

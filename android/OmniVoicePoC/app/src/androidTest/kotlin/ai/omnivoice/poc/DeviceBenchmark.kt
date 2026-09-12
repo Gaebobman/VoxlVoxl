@@ -368,4 +368,42 @@ class DeviceBenchmark {
         bench("crossfade", "len=${joined.size} min_abs=${"%.4f".format(dip)}")
         assertTrue("equal-power cross-fade dipped to $dip", dip > 0.45f)
     }
+
+    /**
+     * How fast can enrollment be VERIFIED?
+     *
+     * The spec (§6) wants a test sentence synthesised right after enrollment, but
+     * that costs a full generation — ~20 s on top of the recording. There is a
+     * much cheaper check available: decode the enrolled codes straight back
+     * through the vocoder. That is literally what the model will hear as the
+     * reference, so it catches a clipped recording, an over-trimmed one, or a
+     * mis-levelled one — and it needs no LM pass at all.
+     */
+    @Test
+    fun t11_enrollEcho() {
+        org.junit.Assume.assumeTrue(OmniVoiceEnroller.available(modelDir))
+        val wav = File(modelDir, "reference.wav")
+        assertTrue("reference.wav missing", wav.isFile)
+        val audio = wav.inputStream().use { WavIo.read(it) }
+
+        val t0 = System.nanoTime()
+        val profile = OmniVoiceEnroller(modelDir, 6).use {
+            it.enroll(audio.samples, audio.sampleRate, "테스트", "echo")
+        }
+        val encodeMs = (System.nanoTime() - t0) / 1_000_000
+
+        // vocoder only — no backbone
+        val t1 = System.nanoTime()
+        val codes = Array(OV.NUM_CODEBOOKS) { c ->
+            LongArray(profile.frames) { t -> profile.codes[c][t].toLong() }
+        }
+        val echo = OnnxModelRunner(modelDir, Backend.CPU, 6).use { it.decodeCodes(codes) }
+        val decodeMs = (System.nanoTime() - t1) / 1_000_000
+
+        WavIo.write(File(outDir, "enroll_echo.wav"), echo, OV.SR_24K)
+        bench("enroll_echo", "encode_ms=$encodeMs decode_ms=$decodeMs " +
+            "total_ms=${encodeMs + decodeMs} in_s=${"%.2f".format(audio.samples.size.toFloat() / audio.sampleRate)} " +
+            "out_s=${"%.2f".format(echo.size.toFloat() / OV.SR_24K)}")
+        assertTrue("no echo audio", echo.isNotEmpty())
+    }
 }
