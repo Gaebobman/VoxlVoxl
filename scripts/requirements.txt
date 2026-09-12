@@ -1,0 +1,8 @@
+# PC-side only. Nothing here ships to the device.
+huggingface_hub>=0.28
+numpy>=1.26
+onnx>=1.17
+onnxruntime>=1.22
+soundfile>=0.12
+# export / golden reference (install separately, see README):
+#   torch>=2.8  torchaudio>=2.8  transformers>=5.4  omnivoice==0.2.1
