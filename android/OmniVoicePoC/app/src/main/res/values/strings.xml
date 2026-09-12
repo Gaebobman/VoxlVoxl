@@ -73,4 +73,7 @@
     <string name="dev_backend_note">가속기가 가져간 노드 0개. 연산의 85%가 int4 GEMM이고 어느 쪽도 구현하지 않습니다.</string>
     <string name="dev_threads">스레드</string>
     <string name="dev_threads_note">8은 6보다 느립니다 — 7·8번 스레드가 프라임 코어에 올라가 스텝 전체가 대기합니다.</string>
+    <string name="verify_name_hint">이 목소리의 이름</string>
+    <string name="voice_rename">이름</string>
+    <string name="voice_rename_title">이름 바꾸기</string>
 </resources>

@@ -33,6 +33,9 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
+    // BuildConfig.DEBUG gates the scripted-launch hook in MainActivity.
+    buildFeatures { buildConfig = true }
+
     sourceSets {
         getByName("main") { kotlin.srcDirs("src/main/kotlin") }
         getByName("androidTest") { kotlin.srcDirs("src/androidTest/kotlin") }

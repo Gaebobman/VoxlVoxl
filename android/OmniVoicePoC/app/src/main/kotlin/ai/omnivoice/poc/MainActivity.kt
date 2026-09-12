@@ -140,6 +140,15 @@ class MainActivity : AppCompatActivity() {
             else -> Screen.COMPOSE
         })
 
+        // Debug builds accept the target text on the launch intent:
+        //   adb shell am start -n … --es target_text "오늘 회의를 시작하겠습니다."
+        // `adb shell input text` cannot type Hangul, so scripted runs and
+        // screenshot capture have no other way to put a real Korean sentence in
+        // the field. Release builds ignore it.
+        if (BuildConfig.DEBUG) intent?.getStringExtra("target_text")?.let {
+            id<EditText>(R.id.targetText).setText(it)
+        }
+
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = goBack()
         })
@@ -151,7 +160,29 @@ class MainActivity : AppCompatActivity() {
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            val up = insets.isVisible(WindowInsetsCompat.Type.ime())
+            if (up != imeUp) { imeUp = up; onKeyboard(up) }
             insets
+        }
+    }
+
+    private var imeUp = false
+
+    /**
+     * The voice chip and the batch note fold away to leave the field its size,
+     * and used to do it on focus. But back dismisses the keyboard without taking
+     * focus off the field, so they stayed folded with nothing covering the space
+     * they had given up. The keyboard is what takes the room, so the keyboard is
+     * what they should follow.
+     */
+    private fun onKeyboard(up: Boolean) {
+        val folded = up && current == Screen.COMPOSE
+        id<ViewGroup>(R.id.composeScrollBody).animateNextLayout()
+        id<View>(R.id.composeVoice).visibility = if (folded) View.GONE else View.VISIBLE
+        id<View>(R.id.composeBatchHint).visibility = if (folded) View.GONE else View.VISIBLE
+        if (!up) {
+            id<EditText>(R.id.targetText).clearFocus()
+            id<EditText>(R.id.queueInput).clearFocus()
         }
     }
 
@@ -231,13 +262,9 @@ class MainActivity : AppCompatActivity() {
         id<Button>(R.id.resultSave).setOnClickListener { saveWav() }
         id<Button>(R.id.resultShare).setOnClickListener { shareWav() }
 
-        // Mid-typing, the voice chip and the batch note are not being read; the
-        // room they take is. Collapse them while the field has focus so the
-        // input keeps its size instead of fighting the keyboard for it.
+        // Folding the chrome is driven by the keyboard (see onKeyboard); focus
+        // only has to keep the field itself in view once the fold has happened.
         id<EditText>(R.id.targetText).setOnFocusChangeListener { _, focused ->
-            id<ViewGroup>(R.id.composeScrollBody).animateNextLayout()
-            id<View>(R.id.composeVoice).visibility = if (focused) View.GONE else View.VISIBLE
-            id<View>(R.id.composeBatchHint).visibility = if (focused) View.GONE else View.VISIBLE
             if (focused) {
                 id<androidx.core.widget.NestedScrollView>(R.id.composeScroll)
                     .post { id<View>(R.id.targetText).let { v -> v.parent.requestChildFocus(v, v) } }
@@ -349,8 +376,39 @@ class MainActivity : AppCompatActivity() {
         }
         v.findViewById<Button>(R.id.voiceTest).setOnClickListener { testVoice(p) }
         v.findViewById<Button>(R.id.voiceRerecord).setOnClickListener { startEnroll(p) }
+        v.findViewById<Button>(R.id.voiceRename).setOnClickListener { renameVoice(p) }
+        // The name is the obvious thing to tap to change the name.
+        v.findViewById<TextView>(R.id.voiceName).setOnClickListener { renameVoice(p) }
         v.findViewById<Button>(R.id.voiceDelete).setOnClickListener { confirmDelete(p) }
         return v
+    }
+
+    /**
+     * The display name lives in a sidecar file next to the codes, so renaming
+     * is a re-save of the same profile — the 1.8 kB of codec codes are untouched.
+     */
+    private fun renameVoice(p: VoiceProfile) {
+        val field = EditText(this).apply {
+            setTextAppearance(R.style.Voxl_Field)
+            setText(p.displayName)
+            setSelection(text.length)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PERSON_NAME
+            maxLines = 1
+            val pad = (18 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad, pad, pad)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.voice_rename_title)
+            .setView(field)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = field.text.toString().trim()
+                if (name.isEmpty()) return@setPositiveButton
+                profiles.save(p.copy(displayName = name))
+                if (selected?.id == p.id) selected = p.copy(displayName = name)
+                refreshVoices()
+            }.show()
     }
 
     private fun confirmDelete(p: VoiceProfile) {
@@ -461,6 +519,9 @@ class MainActivity : AppCompatActivity() {
         }
         id<TextView>(R.id.verifyMeta).text =
             "%.1f초 · %d ms 만에 준비됨".format(p.frames.toFloat() / OV.FRAME_RATE, millis)
+        // Pre-filled with the timestamp so keeping a voice is still one tap, but
+        // this is the one moment the user knows what they just recorded.
+        id<EditText>(R.id.verifyName).setText(p.displayName)
         buildChecks(p)
         setPlayIcon(R.id.verifyPlay, false)
         show(Screen.VERIFY)
@@ -496,7 +557,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun keepProfile() {
-        val p = pendingProfile ?: return
+        val typed = id<EditText>(R.id.verifyName).text.toString().trim()
+        val p = (pendingProfile ?: return).let {
+            if (typed.isEmpty() || typed == it.displayName) it else it.copy(displayName = typed)
+        }
         reRecordingFor?.let { if (it.id != p.id) profiles.delete(it.id) }
         profiles.save(p)
         selected = p

@@ -126,6 +126,18 @@
             <Space android:layout_width="6dp" android:layout_height="1dp" />
 
             <Button
+                android:id="@+id/voiceRename"
+                style="@style/Voxl.Chip"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:minHeight="0dp"
+                android:text="@string/voice_rename"
+                android:textSize="12sp" />
+
+            <Space android:layout_width="6dp" android:layout_height="1dp" />
+
+            <Button
                 android:id="@+id/voiceDelete"
                 style="@style/Voxl.Chip"
                 android:layout_width="0dp"
