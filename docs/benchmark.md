@@ -162,7 +162,25 @@ reference to 104 frames instead of 103 and code agreement collapsed to 2.55 %.
 
 ---
 
-## 6. Galaxy S26+ *(pending — Phase 5)*
+## 6. Runtime-version compatibility ✅
+
+The PC exports and quantizes with **ORT 1.30**, but the Android AAR on Maven
+Central is **1.22.0**. The shipping graphs were loaded and run under a pinned
+`onnxruntime==1.22.0`:
+
+| graph | ORT 1.22 | result |
+|---|---|---|
+| `omnivoice_lm.onnx` (int4, opset 21 + com.microsoft 1) | loads | `logits (1,8,188,1025)`, 318 ms, cos 0.999847 vs PyTorch fp32 — identical to 1.30 |
+| `higgs_decoder.onnx` (opset 20, pure ai.onnx) | loads | `(1,1,46080)` from 48 frames |
+
+So `com.microsoft::MatMulNBits` (4-bit, block 32) and
+`com.microsoft::GatherBlockQuantized` are both present and numerically identical
+in 1.22. The remaining Android-specific unknowns are the ARM64 kernels and the
+external-data loader, not operator coverage.
+
+---
+
+## 7. Galaxy S26+ *(pending — Phase 5)*
 
 | Backend | Precision | num_step | Audio | Load | Latency | RTF | Peak RAM |
 |---|---|---:|---:|---:|---:|---:|---:|

@@ -246,47 +246,46 @@ two extra tensor round-trips per step; we keep it fused.
 
 ## 6. Cost model — why this is the hard part
 
-One conditional forward is `~2 × 440 M = 0.88 GFLOP` per token (transformer stack only),
-plus `~0.017 GFLOP/token` for `audio_heads`, plus `O(S²)` attention.
+One conditional forward is `~2 × 440 M = 0.88 GFLOP` per token (transformer stack
+only), plus `~0.017 GFLOP/token` for `audio_heads`, plus `O(S²)` attention. For the
+repo's sample — 4.1 s reference, 1.9 s target, 37 text tokens — `S_c = 188`,
+`S_u = 48`, and 32 steps costs ≈ 4.1 TFLOP.
 
-For a typical PoC utterance — 6 s reference, 5 s target, ~45 text tokens:
+**These are now measurements, not estimates** — see `docs/benchmark.md` for the full
+tables. Ryzen 7 5700X, ORT CPU EP, int4 block-32:
 
-```
-S_c   = 15 (style) + 45 (text) + 150 (T_ref) + 125 (T_gen)  ≈ 335
-S_u   = 125
-per step        : forward(335) + forward(125)  ≈ 460 token-forwards
-32 steps        : ≈ 14 700 token-forwards      ≈ 13 TFLOP
-```
+| config | threads | RTF |
+|---|---:|---:|
+| 32 steps, guidance 2.0 | 16 | 8.39 |
+| 16 steps, guidance 2.0 | 16 | 4.12 |
+| 16 steps, guidance 2.0 | 4 | 5.44 |
+| 16 steps, guidance 2.0 | 1 | 16.39 |
+| 8 steps, guidance 2.0 | 16 | 2.18 |
+| any steps, guidance 0 | — | **generation fails — silence** |
 
-**13 TFLOP for 5 seconds of audio.** Reference points:
+Thread scaling flattens past 8 threads (4.44× at 16 threads), so the loop is
+bandwidth-bound on the int4 weight stream rather than compute-bound. Anchoring on
+the 4-thread row and allowing 1.5–3× for an Exynos 2600 big core gives a projected
+**RTF 8–16 at 16 steps on the S26+** — roughly 40–80 s for a 5 s sentence.
 
-| target | plausible sustained int4 GEMM | projected latency | projected RTF |
-|---|---|---:|---:|
-| RTX 5080 (fp16) | ~100 TFLOPS | ~0.3 s | ~0.06 |
-| Ryzen 7 5700X, 16 threads (int4) | ~0.4–1.0 TFLOPS | 13–33 s | 2.6–6.6 |
-| Exynos 2600 CPU, 4–6 threads (int4) | ~0.05–0.15 TFLOPS | **90–260 s** | **18–52** |
+### Levers, with their measured cost
 
-The published "RTF 0.592 on CPU" for `onnx-community/OmniVoice-Onnx` is measured on a
-desktop CPU with **no CFG branch, no reference prefix, and a causal (wrong) attention
-graph** — roughly 40 % of the work of a correct cloning run. It does not transfer.
-
-### Levers, in the order we will pull them
-
-| lever | expected saving | quality cost |
+| lever | measured saving | measured quality cost |
 |---|---|---|
-| `num_step` 32 → 16 → 8 | **2× / 4×** | the dominant quality knob — must be measured |
-| `guidance_scale = 0` (drop the uncond branch) | ~1.3× here | prosody/intelligibility drop; measure |
-| shorter reference (10 s → 4 s) | shrinks `S_c` ~25 % | mild speaker-similarity drop |
-| int4 weights + `MatMulNBits` | ~3–4× vs fp32, 4× smaller | small; measure vs fp32 golden |
-| ORT `intra_op_num_threads` on big cores + thread affinity | 1.5–2× | none |
-| chunked generation (`audio_chunk_threshold`) | keeps `S` and O(S²) bounded for long text | cross-fade seams |
+| `num_step` 32 → 16 | **2.0×** | NLL 2.749 → 2.948, still inside the fp32 stochastic band (3.116) |
+| `num_step` 16 → 8 | **1.9×** | NLL → 3.184 — worse than re-rolling fp32; not recommended |
+| int4 block-32 vs fp32 | 5.8× smaller, ~1.15× faster on x86 | none measurable (NLL 2.749 vs 2.752) |
+| int4 block-128 | a further 64 MB | NLL → 3.193 — not worth it |
+| int4 including `audio_heads` | a further 34 MB | NLL → 3.274 — **never do this** |
+| `guidance_scale = 0` | would be ~1.4× | **breaks generation entirely** |
+| shorter reference | shrinks `S_c` linearly | mild speaker-similarity drop (unmeasured) |
+| ORT thread count 1 → 4 | **3.05×** | none |
+| chunked generation | bounds `O(S²)` for long text | cross-fade seams (unmeasured) |
 | NNAPI / Exynos NPU | unknown — see `docs/plan.md` §7 | unknown |
 
-**Working assumption to state up front: the first correct Android CPU run will land
-around RTF 15–40, and the tuned int4 / 8-step configuration around RTF 3–8.** This is a
-feasibility PoC, not a real-time engine; §"Definition of Done" is scoped accordingly.
-
----
+**The honest summary: this is asynchronous synthesis, not interactive TTS.** The two
+levers that looked most promising before measurement — dropping CFG and pushing int4
+everywhere — are the two that do not work.
 
 ## 7. Memory budget (int4 backbone, fp32 codec)
 

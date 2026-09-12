@@ -7,10 +7,12 @@ on a Samsung Galaxy S26+**, with no network access at inference time.
 reference.wav + reference transcript + target text  ──►  cloned speech (24 kHz WAV)
 ```
 
-Status: **Phase 1 — model analysis complete, export not yet run.**
-Read [`docs/plan.md`](docs/plan.md) for where this is going and
-[`docs/onnx-reuse-audit.md`](docs/onnx-reuse-audit.md) for why the obvious shortcut
-(`onnx-community/OmniVoice-Onnx`) does not work.
+Status: **Level 1 reached — full voice cloning runs from ONNX alone on the PC.**
+Phases 1–3 done (golden reference, fused bidirectional export + validation, voice-prompt
+cache). Phase 4 (the Android app) is next. Numbers in
+[`docs/benchmark.md`](docs/benchmark.md); why the obvious shortcut
+(`onnx-community/OmniVoice-Onnx`) does not work in
+[`docs/onnx-reuse-audit.md`](docs/onnx-reuse-audit.md).
 
 ---
 
@@ -52,24 +54,43 @@ Fetches `k2-fsa/OmniVoice` (PyTorch source of truth, 3.3 GB) and the reusable Hi
 ONNX graphs from `onnx-community/OmniVoice-Onnx` (740 MB fp32), then sanity-checks the
 config against `docs/model-analysis.md` §1.
 
-### 3. Golden reference *(not yet implemented — Phase 1)*
+### 3. Golden reference
 
 ```bash
-.venv/bin/python scripts/reference_infer.py \
+# synthesise sample/reference.wav (voice-design mode, so its transcript is exact)
+.venv/bin/python scripts/reference_infer.py bootstrap
+# the golden voice-cloning run + every intermediate tensor
+.venv/bin/python scripts/reference_infer.py clone
+```
+
+### 4. ONNX export and validation
+
+```bash
+.venv/bin/python scripts/export_onnx.py --precision fp32          # 2.45 GB
+.venv/bin/python scripts/sweep_quant.py --keep android_b32        # → models/onnx/int4, 422 MB
+.venv/bin/python scripts/validate_onnx.py --stage all
+```
+
+`sweep_quant.py` measures 16 quantization variants; `--keep` installs one.
+`export_onnx.py --precision int4` reproduces the chosen one directly.
+
+### 5. Run the whole thing from ONNX
+
+```bash
+.venv/bin/python scripts/infer_onnx.py enroll \
     --ref-audio sample/reference.wav --ref-text "$(cat sample/reference.txt)" \
-    --text "$(cat sample/target.txt)" --out out/golden/
+    --out out/voices/me.bin                       # 1766 bytes
+
+.venv/bin/python scripts/infer_onnx.py generate \
+    --voice-prompt out/voices/me.bin --text "$(cat sample/target.txt)" \
+    --lm models/onnx/int4/omnivoice_lm.onnx --num-step 16 \
+    --out out/onnx/cloned.wav
 ```
 
-### 4. ONNX export *(not yet implemented — Phase 2)*
+### 6. Model placement on device *(Phase 4)*
 
 ```bash
-.venv/bin/python scripts/export_onnx.py --precision int4 --out models/onnx/int4
-.venv/bin/python scripts/validate_onnx.py --stage lm --stage codec --stage e2e
-```
-
-### 5. Model placement on device *(Phase 4)*
-
-```bash
+.venv/bin/python scripts/prepare_android_models.py     # → models/android/, 520 MB
 adb push models/android/. /sdcard/Android/data/<pkg>/files/models/
 ```
 
@@ -77,7 +98,7 @@ adb push models/android/. /sdcard/Android/data/<pkg>/files/models/
 on every read. The app copies to app-private `filesDir/models/` on first launch and
 verifies `manifest.json` checksums. **No model is ever fetched over the network.**
 
-### 6. Android build *(Phase 4)*
+### 7. Android build *(Phase 4)*
 
 ```bash
 cd android/OmniVoicePoC && ./gradlew assembleRelease
@@ -109,11 +130,16 @@ No Python on device. No Termux, Chaquopy, embedded CPython or PyTorch-Android.
 
 ## Known limitations (current, honest)
 
-- **Speed is the open question.** Bidirectional attention forbids a KV cache, so every one
-  of the 32 steps re-reads the full sequence. The projection in
-  `docs/model-analysis.md` §6 is RTF 18–52 on the S26+ CPU at default settings, and
-  RTF 3–8 once int4 + `num_step=8` + no-CFG are applied. Real measurements go in
-  `docs/benchmark.md`; the projection stays labelled as a projection until then.
+- **This is asynchronous synthesis, not interactive TTS.** Bidirectional attention
+  forbids a KV cache, so every step re-reads the full sequence. Measured on a Ryzen 7
+  5700X with the shipping int4 model: RTF 4.12 at 16 steps / 16 threads, RTF 5.44 at
+  4 threads. Anchoring on the 4-thread figure, the S26+ projects to **RTF 8–16** —
+  roughly 40–80 s for a 5 s sentence.
+- **`guidance_scale = 0` is not a speed lever.** It produces pure silence (1.92 s
+  entirely below −50 dBFS). The unconditional CFG branch is load-bearing.
+- **int4 has two hard constraints.** `/audio_heads/MatMul` must stay fp32 and the block
+  size must be 32; violating either drops quality below the level of simply re-running
+  fp32 with different sampling noise. See `docs/benchmark.md` §1.
 - **NNAPI will probably not help.** It is deprecated as of Android 15, and
   `MatMulNBits` / `SimplifiedLayerNormalization` are contrib ops it cannot execute — expect
   a fragmented graph. Exynos's 80-TOPS NPU is reachable only via Samsung ENN SDK, for

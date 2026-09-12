@@ -22,50 +22,56 @@ Correctness > Android portability > Offline execution > Performance > NPU > UI
 
 ---
 
-## Phase 1 — PC golden reference  *(blocker for everything else)*
+## Phase 1 — PC golden reference  ✅ **DONE**
 
-Goal: a byte-reproducible PyTorch output to diff every later stage against.
+- [x] `uv` env: `torch 2.14 + cu130`, `transformers 5.17`, `omnivoice 0.2.1`
+- [x] `scripts/download_models.py` → 4.0 GB, 10/10 config assertions pass
+- [x] `scripts/reference_infer.py` — hooks `_prepare_inference_inputs` and `forward`,
+      dumps prompt / per-step logits / codes / waveform; `--deterministic` zeroes
+      `position_temperature` for cell-by-cell comparison
+- [x] `sample/reference.wav` bootstrapped in voice-design mode, so its transcript is exact
+- [x] golden run: RTX 5080 fp16, enroll 1.11 s → (8,103) codes, S=188, 1.79 s audio in 3.1 s
 
-- [ ] `uv` env: `torch 2.8 + cu128`, `transformers>=5.4`, `omnivoice==0.2.1`
-- [ ] `scripts/download_models.py` → `models/omnivoice/` (2.45 GB) + `models/omnivoice/audio_tokenizer/` (806 MB)
-- [ ] `scripts/reference_infer.py` — pin `torch.manual_seed`, dump **every** intermediate:
-      `text_tokens`, `input_ids`, `audio_mask`, per-step `logits`, final `audio_codes`, waveform
-- [ ] record `sample/reference.wav` + `sample/reference.txt` + `sample/target.txt` (Korean)
-- [ ] fix `position_temperature`/Gumbel non-determinism: expose `--deterministic` that sets
-      `position_temperature = 0` for bit-exact comparison, and run the stochastic default separately
-
-**Exit:** `out/golden/{codes.npy, audio.wav, step_*.npz}` exists and sounds like the speaker.
-
----
-
-## Phase 2 — ONNX export + PC validation
-
-- [ ] `scripts/export_onnx.py`
-  - wrapper module: `(input_ids, audio_mask, attention_mask_4d, position_ids) → logits`
-  - bool mask → additive `-inf` bias inside the wrapper; `attn_implementation="sdpa"`
-  - opset 20, legacy exporter, external data, dynamic axes `{batch, seq}`
-  - `--precision fp32 | fp16 | int4` (int4 via `onnxruntime.quantization.matmul_4bits_quantizer`,
-    block 128, RTN; keep `embed_tokens` and `audio_heads` at int8 or fp16 first, measure before
-    pushing them to int4)
-- [ ] `scripts/validate_onnx.py`
-  - `--stage lm`    : per-step `logits` vs golden — report max-abs / cosine per codebook
-  - `--stage codec` : reused Higgs graphs vs `HiggsAudioV2TokenizerModel` — encode, decode, round-trip
-  - `--stage e2e`   : full ONNX pipeline vs golden — codes Hamming distance, waveform MCD/SNR
-- [ ] `scripts/infer_onnx.py` — the **reference implementation of the Kotlin port**; pure
-      `onnxruntime + numpy`, no torch. Every function here gets a 1:1 Kotlin counterpart.
-- [ ] RTF + peak-RSS table on this PC for `fp32 / fp16 / int4 × num_step {32,16,8} × CFG {on,off}`
-
-**Exit (= brief's Level 1):** `reference.wav + reference.txt + target.txt → cloned.wav`
-from ONNX alone, perceptually matching the golden, with a numeric report.
-
-**Risk:** `torch.onnx.export` of Qwen3 + SDPA + a 4-D mask may fold the mask into a
-constant or drop the `Where`. Mitigation: export with `dynamo=False` first, verify the
-graph has a live `attention_mask` input feeding every attention `Add`, and diff logits at
-two different `S` values.
+The dumped prompt confirmed §2.1 of the analysis verbatim, including that the
+reference transcript is concatenated ahead of the target text inside one
+`<|text_start|>…<|text_end|>` block.
 
 ---
 
-## Phase 3 — Voice prompt cache  *(designed in Phase 2, not bolted on later)*
+## Phase 2 — ONNX export + PC validation  ✅ **DONE (Level 1 reached)**
+
+- [x] `scripts/export_onnx.py`
+  - one fused graph: `(input_ids, audio_mask, attention_mask_4d, position_ids) → logits`
+  - bool mask → additive bias inside the wrapper; `sdpa`; opset 20, `dynamo=False`
+  - external data consolidated to a single `.onnx.data`
+- [x] `scripts/validate_onnx.py` — six stages, all green:
+  - `bidir` — perturbing the last frame moves the first quarter's logits by 4.92
+    (causal would give 0); masking keys `[94:]` moves them by 12.66
+  - `lm` — ONNX fp32 vs PyTorch fp32: rel 9.6e-07, cos 1.0000, argmax 100.000 %
+  - `codec` — `higgs_decoder` exact (1.1e-06); encoder 98.94 % on identical input
+  - `dsp` — numpy silence/fade ports bit-exact against pydub (max|Δ| 0.00e+00)
+  - `judge` — re-masking NLL under the fp32 reference, the only quality metric that
+    survives the loop's chaos
+- [x] `scripts/infer_onnx.py` — the Kotlin port's specification, `onnxruntime + numpy` only
+- [x] `scripts/sweep_quant.py` — 16 quantization variants measured
+- [x] full RTF / step / thread tables → `docs/benchmark.md`
+
+**Exit (= brief's Level 1): reached.** `reference.wav + reference.txt + target.txt →
+cloned.wav` from ONNX alone, quality tied with the PyTorch reference by re-masking NLL
+(2.749 vs 2.752).
+
+The anticipated risk (the exporter folding the 4-D mask into a constant) did **not**
+materialise — `dynamo=False` + the in-graph bool→bias conversion keeps the mask live,
+and the `bidir` stage exists to catch a regression.
+
+Findings that changed the plan:
+- `guidance_scale = 0` is not a performance lever; it produces pure silence
+- `/audio_heads/MatMul` must stay fp32, and the int4 block size must be 32
+- shipping model is **422 MB**, not the ~390 MB estimated
+
+---
+
+## Phase 3 — Voice prompt cache  ✅ **DONE**
 
 The enrollment path (acoustic + semantic + quantizer, 654 MB fp32) and the generation
 path (LM + decoder) are **separate sessions with separate lifetimes**.
@@ -97,8 +103,10 @@ codes         i16[8 * T_ref]        # row-major, codebook-major
 ~4 kB for a 10 s reference. Removes 654 MB of models and ~1–2 s of encoder work from the
 hot path, and makes an "enrollment-only" APK variant possible.
 
-**Exit:** `scripts/infer_onnx.py --voice-prompt my.bin` produces the same codes as
-`--ref-audio ref.wav --ref-text "…"`.
+**Done.** `scripts/infer_onnx.py enroll` writes the file (1766 bytes for a 4.12 s
+reference) and `generate --voice-prompt` consumes it. Against the PyTorch prompt the
+codes agree 92.11 % overall and 99 % on codebook 0. Enrollment costs 1.7 s and is the
+only time the 654 MB of encoder graphs is needed.
 
 ---
 
