@@ -157,9 +157,34 @@ Correctly scoped as experimental.
 
 ## 5. Expressive Speech
 
-| ID | status | evidence |
-|---|---|---|
-| F-D01 Non-verbal | **tokenizer verified, acoustics unverified** | `[laughter]`, `[sigh]` and the other 11 tags tokenize standalone and are pinned by fixtures. Whether they actually produce the sound is **not yet measured** — the same probe would answer it. |
+**F-D01 Non-verbal Expression — ✅ works.** The tags do not merely tokenize; they
+produce audible events. Method: the same carrier sentence with and without a tag,
+against four no-tag control runs at different seeds whose spread sets the
+threshold (`scripts/nonverbal_probe.py`).
+
+Control (`"네 알겠습니다"`): duration 1.067 s ± 0.135, voiced 78.8 % ± 2.7 pp,
+HF 0.67 % ± 0.13 pp.
+
+| tag | duration | Δ duration | voiced % | Δ voiced | verdict |
+|---|---:|---:|---:|---:|---|
+| `[laughter]` | 1.82 s | **+0.75 s (+5.5σ)** | 62.6 % | **−6.1σ** | audible |
+| `[sigh]` | 1.42 s | +0.35 s (+2.6σ) | 63.3 % | **−5.9σ** | audible |
+| `[confirmation-en]` | 1.74 s | +0.67 s (+5.0σ) | 84.3 % | +2.0σ | audible |
+| `[surprise-oh]` | 1.70 s | +0.63 s (+4.6σ) | 83.8 % | +1.9σ | audible |
+| `[question-en]` | 1.51 s | +0.44 s (+3.3σ) | 87.9 % | **+3.4σ** | audible |
+| `[surprise-ah]` | 1.50 s | +0.43 s (+3.2σ) | 86.7 % | **+3.0σ** | audible |
+| `[dissatisfaction-hnn]` | 1.37 s | +0.30 s (+2.2σ) | 82.3 % | +1.3σ | marginal |
+
+Every tag adds duration — it is an extra utterance, not a modifier. The direction
+of the voiced-fraction change is the giveaway that it is the *right* utterance:
+`[laughter]` and `[sigh]` push it sharply **down** (breathy, aperiodic), while
+`[surprise-ah]`, `[question-en]` and `[confirmation-en]` push it **up** (sustained
+vowels). `[dissatisfaction-hnn]` is the one weak case and should be left out of a
+user-facing picker until it is checked by ear.
+
+Note the tags append an event to the utterance; they do not colour the sentence.
+So the UI abstraction in the spec (`Laugh` / `Sigh` / `Surprise` /
+`Dissatisfaction`) is best rendered as an insert-at-cursor button, not a mode.
 
 ---
 
