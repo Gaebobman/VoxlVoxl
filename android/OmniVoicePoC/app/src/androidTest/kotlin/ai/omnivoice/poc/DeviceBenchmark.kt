@@ -122,19 +122,25 @@ class DeviceBenchmark {
         val runs = arg("runs", "5").toInt()
         val steps = arg("steps", "16").toInt()
         val threads = arg("threads", "6").toInt()
-        val prompt = VoicePrompt.load(File(modelDir, "voice_prompt.bin"))
+        val vp7 = VoicePrompt.load(File(modelDir, "voice_prompt.bin"))
+        val prompt = ai.omnivoice.poc.core.VoiceProfile(
+            id = "bench", displayName = "bench", codes = vp7.codes,
+            refText = vp7.refText, refRms = vp7.refRms, sampleRate = vp7.sampleRate)
         val power = ctx.getSystemService(android.os.PowerManager::class.java)
 
-        OmniVoiceEngine(modelDir, Backend.CPU, threads).use { engine ->
-            engine.preload()
+        OmniVoiceEngine(modelDir, Backend.CPU, threads,
+                        cfg = GenConfig(numStep = steps)).use { engine ->
+            engine.load()
             for (i in 1..runs) {
-                val r = engine.generate(
+                val r = engine.synthesize(
                     text = inputText("오늘 회의를 시작하겠습니다."),
-                    prompt = prompt, language = "ko", cfg = GenConfig(numStep = steps),
+                    voiceProfile = prompt,
+                    style = ai.omnivoice.poc.core.VoiceStyle(language = "ko"),
                 )
                 val thermal = runCatching { power.currentThermalStatus }.getOrDefault(-1)
-                bench("thermal", "run=$i/$runs total_ms=${r.totalMillis} " +
-                    "lm_ms=${r.lmMillis} rtf=${"%.3f".format(r.rtf)} thermal_status=$thermal")
+                bench("thermal", "run=$i/$runs total_ms=${r.metrics.totalMillis} " +
+                    "gen_ms=${r.metrics.generateMillis} " +
+                    "rtf=${"%.3f".format(r.metrics.rtf)} thermal_status=$thermal")
             }
         }
     }
@@ -200,9 +206,12 @@ class DeviceBenchmark {
         val promptFile = File(modelDir, "voice_prompt.bin")
         assertTrue("voice_prompt.bin missing — adb push it next to the models",
             promptFile.isFile)
-        val prompt = VoicePrompt.load(promptFile)
-        bench("prompt", "frames=${prompt.numFrames} seconds=${"%.2f".format(prompt.durationSeconds)} " +
-            "rms=${prompt.refRms}")
+        val vp = VoicePrompt.load(promptFile)
+        val prompt = ai.omnivoice.poc.core.VoiceProfile(
+            id = "bench", displayName = "bench", codes = vp.codes,
+            refText = vp.refText, refRms = vp.refRms, sampleRate = vp.sampleRate)
+        bench("prompt", "frames=${prompt.frames} " +
+            "seconds=${"%.2f".format(prompt.frames.toFloat() / OV.FRAME_RATE)} rms=${prompt.refRms}")
 
         val backend = Backend.valueOf(arg("backend", "CPU"))
         val threads = arg("threads", "0").toInt()
@@ -216,44 +225,147 @@ class DeviceBenchmark {
         val lmFile = arg("model", "omnivoice_lm.onnx")
         OmniVoiceEngine(modelDir, backend, threads,
                         verbose = arg("verbose", "false").toBoolean(),
-                        lmFileName = lmFile).use { engine ->
-            engine.preload()
-            val r = engine.generate(
-                text = text, prompt = prompt, language = "ko", cfg = cfg,
+                        lmFileName = lmFile, cfg = cfg,
+                        thermalStatus = {
+                            runCatching {
+                                ctx.getSystemService(android.os.PowerManager::class.java)
+                                    .currentThermalStatus
+                            }.getOrDefault(-1)
+                        }).use { engine ->
+            engine.load()
+            val r = engine.synthesize(
+                text = text, voiceProfile = prompt,
+                style = ai.omnivoice.poc.core.VoiceStyle(language = arg("language", "ko")),
+                onProgress = { p ->
+                    if (p.step % 4 == 0 || p.step == 1) {
+                        Log.i(TAG, "  chunk ${p.chunk}/${p.totalChunks} step ${p.step}/" +
+                            "${p.totalSteps}, ${p.cellsRemaining} cells masked")
+                    }
+                },
                 deterministic = arg("deterministic", "false").toBoolean(),
-            ) { step, total, left ->
-                if (step % 4 == 0 || step == 1) Log.i(TAG, "  step $step/$total, $left cells masked")
-            }
+            )
 
             val after = Debug.MemoryInfo().also { Debug.getMemoryInfo(it) }
             val tag = lmFile.substringBefore('/').ifEmpty { "dyn" }
                 .let { if (it.endsWith(".onnx")) "dyn" else it }
             val name = "gen_${tag}_${backend}_s${steps}_t${threads}.wav"
-            WavIo.write(File(outDir, name), r.waveform, r.sampleRate)
+            WavIo.write(File(outDir, name), r.samples, r.sampleRate)
             // raw codes so the PC side can score this run with the same
             // re-masking judge used on the desktop outputs
-            File(outDir, name.removeSuffix(".wav") + ".codes.bin").outputStream().use { os ->
-                val bb = java.nio.ByteBuffer
-                    .allocate(OV.NUM_CODEBOOKS * r.targetFrames * 2)
-                    .order(java.nio.ByteOrder.LITTLE_ENDIAN)
-                for (c in 0 until OV.NUM_CODEBOOKS) {
-                    for (t in 0 until r.targetFrames) bb.putShort(r.codes[c][t].toShort())
-                }
-                os.write(bb.array())
-            }
 
+            val m = r.metrics
             bench("generate",
                 "backend=$backend threads=$threads steps=$steps " +
-                    "S=${r.sequenceLength} frames=${r.targetFrames} " +
-                    "lm_calls=${r.lmCalls} lm_ms=${r.lmMillis} voc_ms=${r.vocoderMillis} " +
-                    "post_ms=${r.postMillis} total_ms=${r.totalMillis} " +
-                    "audio_s=${"%.3f".format(r.audioSeconds)} rtf=${"%.3f".format(r.rtf)} " +
-                    "load_lm_ms=${r.lmLoadMillis} load_voc_ms=${r.vocoderLoadMillis} " +
+                    "S=${m.sequenceLength} frames=${m.targetFrames} chunks=${m.chunks} " +
+                    "gen_ms=${m.generateMillis} voc_ms=${m.decodeMillis} " +
+                    "post_ms=${m.postMillis} total_ms=${m.totalMillis} " +
+                    "audio_s=${"%.3f".format(m.audioSeconds)} rtf=${"%.3f".format(m.rtf)} " +
+                    "load_ms=${m.modelLoadMillis} thermal=${m.thermalStatus} " +
                     "pss_before_kb=${before.totalPss} pss_after_kb=${after.totalPss} " +
                     "native_kb=${after.nativePss} out=$name")
 
-            assertTrue("no audio produced", r.waveform.isNotEmpty())
-            assertTrue("audio shorter than 0.3s", r.audioSeconds > 0.3)
+            assertTrue("no audio produced", r.samples.isNotEmpty())
+            assertTrue("audio shorter than 0.3s", m.audioSeconds > 0.3)
         }
+    }
+
+    /** F-A01 / F-A02 — enrollment on the device itself. */
+    @Test
+    fun t08_enroll() {
+        org.junit.Assume.assumeTrue(
+            "encoder graphs absent — this build cannot enroll",
+            OmniVoiceEnroller.available(modelDir))
+
+        val wav = File(modelDir, arg("refwav", "reference.wav"))
+        assertTrue("${wav.name} missing — push sample/reference.wav", wav.isFile)
+        val audio = wav.inputStream().use { WavIo.read(it) }
+        val refText = inputText("안녕하세요. 이것은 제 목소리를 등록하기 위한 테스트 음성입니다.")
+
+        val threads = arg("threads", "6").toInt()
+        val profile = OmniVoiceEnroller(modelDir, threads).use { enroller ->
+            enroller.enroll(audio.samples, audio.sampleRate, refText, "On-device")
+                .also { bench("enroll", "ms=${enroller.lastEncodeMillis} frames=${it.frames}") }
+        }
+
+        val mgr = FileVoiceProfileManager(File(ctx.filesDir, "voices"))
+        mgr.save(profile)
+        val back = mgr.get(profile.id)
+        assertTrue("profile did not round-trip through storage", back != null)
+        assertEquals(profile.frames, back!!.frames)
+        bench("profiles", "count=${mgr.list().size} dir=${mgr.directory()}")
+
+        // agreement against the profile the PC produced from the same clip
+        val ref = VoicePrompt.load(File(modelDir, "voice_prompt.bin"))
+        val n = minOf(ref.numFrames, profile.frames)
+        var same = 0
+        var cb0 = 0
+        for (c in 0 until OV.NUM_CODEBOOKS) {
+            for (t in 0 until n) {
+                if (ref.codes[c][t] == profile.codes[c][t]) {
+                    same++
+                    if (c == 0) cb0++
+                }
+            }
+        }
+        bench("enroll_agreement",
+            "frames=${profile.frames} vs_pc=${ref.numFrames} " +
+                "all=${"%.2f".format(100.0 * same / (OV.NUM_CODEBOOKS * n))} " +
+                "cb0=${"%.2f".format(100.0 * cb0 / n)}")
+    }
+
+    /** Cancellation must abort promptly and must not yield a partial clip. */
+    @Test
+    fun t09_cancel() {
+        val vp = VoicePrompt.load(File(modelDir, "voice_prompt.bin"))
+        val prompt = ai.omnivoice.poc.core.VoiceProfile(
+            id = "bench", displayName = "bench", codes = vp.codes,
+            refText = vp.refText, refRms = vp.refRms, sampleRate = vp.sampleRate)
+        val cancelAfter = arg("cancel_after", "3").toInt()
+
+        OmniVoiceEngine(modelDir, Backend.CPU, arg("threads", "6").toInt(),
+                        cfg = GenConfig(numStep = 16)).use { engine ->
+            engine.load()
+            var steps = 0
+            val t0 = System.nanoTime()
+            var threw = false
+            try {
+                engine.synthesize(
+                    text = inputText("오늘 회의를 시작하겠습니다."),
+                    voiceProfile = prompt,
+                    onProgress = { steps = it.step },
+                    isActive = { steps < cancelAfter },
+                )
+            } catch (e: ai.omnivoice.poc.core.SynthesisCancelledException) {
+                threw = true
+            }
+            val ms = (System.nanoTime() - t0) / 1_000_000
+            bench("cancel", "requested_after_step=$cancelAfter observed_steps=$steps " +
+                "elapsed_ms=$ms threw=$threw")
+            assertTrue("cancellation did not throw", threw)
+            assertTrue("cancelled too late: $steps steps", steps <= cancelAfter + 1)
+        }
+    }
+
+    /** Long text must split, and the seams must not lose audio. */
+    @Test
+    fun t10_chunking() {
+        val estimate = { t: String -> DurationEstimator.estimateFrames(t, "안녕하세요.", 103) }
+        val short = TextChunker.chunk("오늘 회의를 시작하겠습니다.", estimate)
+        assertEquals(1, short.size)
+
+        val long = buildString { repeat(14) { append("오늘 회의를 시작하겠습니다. ") } }
+        val parts = TextChunker.chunk(long, estimate)
+        bench("chunking", "estimated_frames=${estimate(long)} chunks=${parts.size} " +
+            "sizes=${parts.map { estimate(it) }}")
+        assertTrue("long text was not split", parts.size > 1)
+
+        val a = FloatArray(24_000) { 0.5f }
+        val b = FloatArray(24_000) { 0.5f }
+        val joined = TextChunker.crossFade(listOf(a, b), OV.SR_24K)
+        assertEquals(a.size + b.size - (0.05f * OV.SR_24K).toInt(), joined.size)
+        var dip = 1.0f
+        for (v in joined) dip = minOf(dip, Math.abs(v))
+        bench("crossfade", "len=${joined.size} min_abs=${"%.4f".format(dip)}")
+        assertTrue("equal-power cross-fade dipped to $dip", dip > 0.45f)
     }
 }
