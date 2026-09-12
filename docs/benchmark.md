@@ -136,23 +136,8 @@ Scaling is good to 4 threads and flattens after 8 — the workload is
 memory-bandwidth bound on the int4 weight stream, which is exactly the regime a
 phone is worse at.
 
-### Projection for the Galaxy S26+ *(projection, not measurement)*
-
-The right anchor is the **4-thread** row (RTF 5.44 at 16 steps), since that is
-roughly the S26+'s big-core count. An Exynos 2600 big core is plausibly 1.5–3×
-slower than a Zen 3 core at int4/int8 GEMM once clocks and thermal limits are
-accounted for:
-
-| num_step | desktop 4-thread RTF | projected S26+ RTF |
-|---:|---:|---:|
-| 32 | 11.1 | **17 – 33** |
-| 16 | 5.44 | **8 – 16** |
-| 8 | 2.9 | **4 – 9** |
-
-Read plainly: **a 5-second sentence will take roughly 40–80 seconds on the phone
-at the recommended 16-step setting.** Useful for asynchronous synthesis — draft
-a message, generate it, send it — and not useful for anything interactive. The
-measurement that replaces this table is the first thing Phase 5 produces.
+Desktop thread scaling was once used to project a phone number. It no longer
+has to be: §7 measures the device directly.
 
 ---
 
@@ -213,9 +198,7 @@ external-data loader, not operator coverage.
 
 ## 7. On device — Galaxy S26 Ultra ✅
 
-**The target device is not the one the brief assumed.** It is a Galaxy S26
-**Ultra** (SM-S948N), and its SoC is **Qualcomm SM8850 — Snapdragon 8 Elite
-Gen 5**, not an Exynos 2600:
+Every number in this section was measured on:
 
 ```
 ro.product.model       SM-S948N          ro.soc.manufacturer  QTI
@@ -225,9 +208,8 @@ MemTotal               11 389 624 kB     cores                8
 CPU part 0x002 (Oryon) x8: 6 @ 3.63 GHz + 2 @ 4.74 GHz
 ```
 
-That invalidates the brief's Phase 7 premise (Samsung ENN SDK / Exynos NPU) and
-replaces it with a better one — Qualcomm ships a QNN execution provider for ONNX
-Runtime (`onnxruntime-android-qnn`) targeting the Hexagon NPU. See §7.5.
+Qualcomm ships a QNN execution provider for ONNX Runtime
+(`onnxruntime-android-qnn`) targeting this SoC's Hexagon NPU. See §7.5.
 
 ### Level 2 — sessions load ✅
 
@@ -394,7 +376,7 @@ re-exporting; upstream PyTorch does exactly this, padding the unconditional
 branch up to `max_c_len`.
 
 For QNN specifically (`com.microsoft.onnxruntime:onnxruntime-android-qnn`, which
-applies because this is a Snapdragon — the device carries
+applies here — the device carries
 `libSnpeHtpV81Stub.so` and `libnspextensiongenericqnnservice.so`):
 
 | requirement | why | status |
@@ -405,10 +387,7 @@ applies because this is a Snapdragon — the device carries
 | bucketed S with padding | see above | designed, not built |
 | 422 MB of weights vs HTP tightly-coupled memory | large models stream weights; this is what Qualcomm's Genie/QAIRT stack exists to manage | unknown |
 
-That is a real project, not a flag. It is the single highest-value remaining
-experiment, and it only exists because the device turned out to be a Snapdragon —
-an Exynos 2600 would have offered NNAPI (deprecated) or Samsung's ENN SDK, for
-which ONNX Runtime has no execution provider at all.
+That is a real project, not a flag.
 
 ### 7.6b Utterance length — short sentences are the expensive case
 
@@ -502,7 +481,7 @@ error is on every run.)
 | newest ORT Android artifact on Maven Central | **1.22.0, published 2025-05-09** |
 
 So there is no combination of options that can work: the QNN SDK bundled with the
-newest published ORT Android package was cut before Snapdragon 8 Elite Gen 5
+newest published ORT Android package was cut before this SoC
 existed, and the device provides no QNN backend of its own to fall back on.
 
 **And the QDQ graph is worse on CPU anyway** — one forward at S = 188:
@@ -673,10 +652,33 @@ it has SME1, not SME2.** The full feature line:
 ```
 
 No `sme2`. Most of the reported uplift in that work is attributed to SME2 kernels,
-so only the **i8mm / dotprod** path can dispatch here. The device measurement is
-pending and is the only one worth quoting: PC timings taken while other jobs
-shared the machine varied 6.6–12.4 s for the same configuration and are not
-evidence of anything.
+so only the **i8mm / dotprod** path can dispatch here.
+
+**Measured on device**, 16 steps, 6 threads, CPU EP, S = 188:
+
+| ORT | compute | LM gen | RTF |
+|---|---|---:|---:|
+| 1.22.0 | fp32 (was shipping) | 25 439 ms | 15.39 |
+| 1.22.0 | int8 | 20 303 ms | 12.60 |
+| 1.29.0 | fp32 | 23 927 ms | 14.63 |
+| **1.29.0** | **int8** | **9 426 ms** | **6.65** |
+
+Version bump alone 1.05x, attribute alone 1.25x, **together 2.3x**. Confirmed by
+interleaved A/B with both sessions live in one process: 1.398x on 1.22 and
+2.163x on 1.29, faster in 8/8 rounds both times. Logit agreement on a single
+forward: argmax 384/384, max |Δ| 0.113. Both graphs load at opset 20 on 1.29
+with `MatMulNBits` and `GatherBlockQuantized` still supported and no load-time
+regression.
+
+Through the app, same sentence, same device: **6.05 s in 38.1 s (RTF 6.3) →
+5.35 s in 19.4 s (RTF 3.63)**. A 19.28 s utterance runs in 54.1 s, **RTF 2.81**.
+
+Cost: **+90 MB peak PSS** at S = 188 (769 vs 680 MB) — the int8 path prepacks an
+extra weight copy. At S = 757 peak PSS is **1.45 GB**, which is comfortable in
+11.4 GB but scales with the utterance.
+
+PC timings are excluded from this table: taken while other jobs shared the
+machine, the same configuration varied 6.6–12.4 s.
 
 ### 7.9 Codebook ablation — which layers of the RVQ actually matter
 
@@ -727,10 +729,8 @@ construction. On device the ladder shows the resulting staircase directly —
 
 **1. Did OmniVoice inference actually run on the Galaxy S26?**
 **Yes.** Reference WAV + typed transcript + target text → a 1.88 s cloned WAV,
-entirely on a Galaxy S26 Ultra (SM-S948N, Android 16), through ONNX Runtime with
-no Python anywhere. Levels 2, 3, 4 and 5 are all reached. Note the device is an
-**Ultra with Snapdragon 8 Elite Gen 5 (SM8850)**, not the Exynos 2600 the brief
-assumed.
+entirely on a Galaxy S26 Ultra (SM-S948N, SM8850, Android 16), through ONNX
+Runtime with no Python anywhere. Levels 2, 3, 4 and 5 are all reached.
 
 **2. Is it fully offline?**
 **Yes, and enforced rather than asserted.** The APK declares no `INTERNET`
@@ -744,9 +744,9 @@ exactly why, with four experiments rather than an assertion. Dynamic shapes make
 both accelerators claim **0 of 2785 nodes** at any precision; pinning the shapes
 gets NNAPI to 142 nodes, which then run **5.6× slower** than the whole graph does
 on CPU; and the 85 % of the work that is `MatMulNBits` is unreachable for any of
-them. The untried option is **QNN / Hexagon**, which this Snapdragon supports and
-an Exynos would not — but it needs static bucketed shapes, a QDQ int8 requantize
-with calibration, and context-binary caching, so it is a project, not a flag.
+them. The untried option is **QNN / Hexagon**, which this SoC supports — but it
+needs static bucketed shapes, a QDQ int8 requantize with calibration, and
+context-binary caching, so it is a project, not a flag.
 
 **4. Is it fast enough for real use?**
 **For asynchronous use, yes. For interactive use, no.**

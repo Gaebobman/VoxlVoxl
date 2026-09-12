@@ -74,7 +74,7 @@ dependencies {
     // ORT ships a newer QNN SDK, swap the line below for
     // `onnxruntime-android-qnn` and run with `-e backend QNN`; the Backend.QNN
     // code path is kept for exactly that.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testImplementation("org.json:json:20240303")

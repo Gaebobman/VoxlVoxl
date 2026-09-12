@@ -25,6 +25,15 @@ class OmniVoiceEngine(
     lmFileName: String = "omnivoice_lm.onnx",
     private val cfg: GenConfig = GenConfig(),
     private val thermalStatus: () -> Int = { -1 },
+    /**
+     * Run both CFG branches in one forward — see OnnxModelRunner.forwardFused.
+     * Bit-identical either way, but MEASURED off by default: worth 1.04x on the
+     * old int4 compute path (ORT 1.22, accuracy_level=1) and 0.98x once the GEMM
+     * is on the int8 path (ORT 1.29 + accuracy_level=4), because what it saves
+     * is per-call fixed cost and what it adds is (S+T)^2 attention instead of
+     * S^2 + T^2. Kept because the A/B is cheap to re-run if the GEMM changes.
+     */
+    var fuseCfg: Boolean = false,
     private val peakPssKb: () -> Int = { -1 },
 ) : SpeechSynthesizer {
 
@@ -215,16 +224,29 @@ class OmniVoiceEngine(
             val k = schedule[step]
             if (k <= 0) continue
 
-            val cLogits = runner.forward(inputIds, audioMask)
-            val uLogits = if (cfg.guidanceScale != 0.0f) runner.forward(uIds, uMask) else null
+            val fuse = fuseCfg && cfg.guidanceScale != 0.0f
+            val cLogits: FloatArray
+            val uLogits: FloatArray?
+            if (fuse) {
+                cLogits = runner.forwardFused(inputIds, audioMask, genStart)
+                uLogits = cLogits
+            } else {
+                cLogits = runner.forward(inputIds, audioMask)
+                uLogits = if (cfg.guidanceScale != 0.0f) runner.forward(uIds, uMask) else null
+            }
+            // row stride and the unconditional branch's first row differ between
+            // the fused layout ([8][S+T]) and the split one ([8][S] + [8][T])
+            val cStride = if (fuse) s + tGen else s
+            val uStride = if (fuse) s + tGen else tGen
+            val uBase = if (fuse) s else 0
 
             for (c in 0 until OV.NUM_CODEBOOKS) {
                 for (t in 0 until tGen) {
-                    val cOff = ((c * s) + genStart + t) * v
+                    val cOff = ((c * cStride) + genStart + t) * v
                     val dst = ((c * tGen) + t) * v
                     logSoftmaxInto(cLogits, cOff, logProbs, dst, v)
                     if (uLogits != null) {
-                        logSoftmaxInto(uLogits, ((c * tGen) + t) * v, uTmp, 0, v)
+                        logSoftmaxInto(uLogits, ((c * uStride) + uBase + t) * v, uTmp, 0, v)
                         for (i in 0 until v) {
                             val cl = logProbs[dst + i]
                             logProbs[dst + i] = cl + cfg.guidanceScale * (cl - uTmp[i])

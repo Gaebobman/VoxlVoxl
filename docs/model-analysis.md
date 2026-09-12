@@ -11,19 +11,24 @@
 OmniVoice is **not** an autoregressive codec-LM (not VALL-E / not ZipVoice flow-matching).
 It is a **masked diffusion language model** over an 8-codebook neural audio codec:
 
+```mermaid
+flowchart TB
+    IN["input_ids [B, 8, S]<br/>audio_mask [B, S]"] --> BB
+    BB["Qwen3-0.6B backbone<br/>28 layers · hidden 1024 · 16 Q / 8 KV heads · head_dim 128<br/><b>bidirectional (NON-causal) attention over the whole sequence</b>"]
+    BB --> HEAD["audio_heads<br/>Linear(1024 → 8 × 1025)"]
+    HEAD --> LOG["logits [B, 8, S, 1025]"]
+    LOG --> UNMASK{"iterative un-masking<br/>over the (codebook × frame) grid"}
+    UNMASK -->|"still masked cells"| IN
+    UNMASK -->|"grid full"| CODES["audio_codes [8, T]"]
+    CODES --> DEC["Higgs Audio V2 Tokenizer decoder"]
+    DEC --> WAV["24 kHz waveform"]
+
+    style BB fill:#2a1a30,stroke:#9b84df,color:#f6f1ea
+    style WAV fill:#3a2a10,stroke:#eda13f,color:#f6f1ea
 ```
-Qwen3-0.6B backbone (28 layers, hidden 1024, 16 Q heads / 8 KV heads, head_dim 128)
-        ▲ bidirectional (NON-causal) full attention over the whole sequence
-        │
-  input_ids [B, 8, S]  +  audio_mask [B, S]
-        │
-        ▼
-  audio_heads: Linear(1024 → 8 × 1025)  →  logits [B, 8, S, 1025]
-        │
-  32-step iterative un-masking over the (codebook × frame) grid
-        ▼
-  audio_codes [8, T]  →  Higgs Audio V2 Tokenizer decoder  →  24 kHz waveform
-```
+
+The loop edge is the whole story: because attention is bidirectional, every step
+re-reads the **entire** sequence and nothing from the previous step can be cached.
 
 Constants (`OmniVoiceConfig`, `config.json` of `k2-fsa/OmniVoice`):
 
@@ -264,9 +269,9 @@ tables. Ryzen 7 5700X, ORT CPU EP, int4 block-32:
 | any steps, guidance 0 | — | **generation fails — silence** |
 
 Thread scaling flattens past 8 threads (4.44× at 16 threads), so the loop is
-bandwidth-bound on the int4 weight stream rather than compute-bound. Anchoring on
-the 4-thread row and allowing 1.5–3× for an Exynos 2600 big core gives a projected
-**RTF 8–16 at 16 steps on the S26+** — roughly 40–80 s for a 5 s sentence.
+bandwidth-bound on the int4 weight stream rather than compute-bound. The device
+figures that replace any projection from this table are in
+[`benchmark.md`](benchmark.md) §7.
 
 ### Levers, with their measured cost
 
@@ -281,7 +286,7 @@ the 4-thread row and allowing 1.5–3× for an Exynos 2600 big core gives a proj
 | shorter reference | shrinks `S_c` linearly | mild speaker-similarity drop (unmeasured) |
 | ORT thread count 1 → 4 | **3.05×** | none |
 | chunked generation | bounds `O(S²)` for long text | cross-fade seams (unmeasured) |
-| NNAPI / Exynos NPU | unknown — see `docs/plan.md` §7 | unknown |
+| NNAPI | measured: **slower** than CPU — `benchmark.md` §7.4 | none |
 
 **The honest summary: this is asynchronous synthesis, not interactive TTS.** The two
 levers that looked most promising before measurement — dropping CFG and pushing int4

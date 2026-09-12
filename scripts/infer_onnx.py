@@ -287,6 +287,79 @@ class Backbone:
         self.calls += 1
         return out
 
+    # The two branches of CFG, so that CachedBackbone can override only the one
+    # that has a prefix to cache. Base class: both are plain full forwards.
+    def cond(self, input_ids, audio_mask, gen_start, step):
+        return self(input_ids, audio_mask)[0, :, gen_start:, :]
+
+    def uncond(self, input_ids, audio_mask):
+        return self(input_ids, audio_mask)[0]
+
+
+class CachedBackbone(Backbone):
+    """Approximate prefix KV cache (Fast-dLLM, arXiv:2505.22618 §3.2).
+
+    At S=188 the conditional sequence is [140 prefix | 48 generated]. The prefix
+    — style tokens, reference transcript, reference codes, target text — is
+    byte-identical across all 32 forwards, but OmniVoice's attention is
+    BIDIRECTIONAL, so the prefix's own K/V still depend on the generated region.
+    Caching them is therefore an approximation, and `refresh_every` is the knob
+    that buys the approximation back: 0 = compute the prefix K/V once and never
+    again, N = recompute every N steps.
+
+    Needs the `--kv-cache` export (extra past_key/past_value I/O). The same
+    session serves the unconditional branch too, with an empty past, so the
+    runtime still ships exactly one backbone file.
+    """
+
+    def __init__(self, path: Path, threads: int = 0, refresh_every: int = 0,
+                 layers: int = 28, kv_heads: int = 8, head_dim: int = 128):
+        super().__init__(path, threads)
+        names = {i.name for i in self.sess.get_inputs()}
+        if "past_key" not in names:
+            raise SystemExit(f"{path} has no past_key input — export it with "
+                             f"`export_onnx.py --kv-cache`")
+        self.refresh_every = refresh_every
+        self.empty = np.zeros((layers, 1, kv_heads, 0, head_dim), dtype=np.float32)
+        self.past_k = self.past_v = None
+        self.prefix_len = 0
+        self.prefills = 0
+
+    def _run(self, input_ids, audio_mask, past_k, past_v, pos0):
+        b, _, q = input_ids.shape
+        kv = q + past_k.shape[3]
+        feed = {
+            "input_ids": input_ids,
+            "audio_mask": audio_mask,
+            "attention_mask": np.ones((b, 1, q, kv), dtype=bool),
+            "position_ids": np.arange(pos0, pos0 + q, dtype=np.int64)[None, :].repeat(b, 0),
+            "past_key": past_k,
+            "past_value": past_v,
+        }
+        t0 = time.perf_counter()
+        out = self.sess.run(["logits", "present_key", "present_value"], feed)
+        self.compute_seconds += time.perf_counter() - t0
+        self.calls += 1
+        return out
+
+    def cond(self, input_ids, audio_mask, gen_start, step):
+        stale = self.past_k is None or (
+            self.refresh_every and step % self.refresh_every == 0)
+        if stale:
+            logits, pk, pv = self._run(input_ids, audio_mask,
+                                       self.empty, self.empty, 0)
+            self.past_k = np.ascontiguousarray(pk[:, :, :, :gen_start])
+            self.past_v = np.ascontiguousarray(pv[:, :, :, :gen_start])
+            self.prefix_len = gen_start
+            self.prefills += 1
+            return logits[0, :, gen_start:, :]
+        logits, _, _ = self._run(input_ids[:, :, gen_start:], audio_mask[:, gen_start:],
+                                 self.past_k, self.past_v, gen_start)
+        return logits[0]
+
+    def uncond(self, input_ids, audio_mask):
+        return self._run(input_ids, audio_mask, self.empty, self.empty, 0)[0][0]
+
 
 def generate_codes(lm: Backbone, input_ids: np.ndarray, audio_mask: np.ndarray,
                    gen_start: int, cfg: GenConfig, rng, progress=True) -> np.ndarray:
@@ -309,9 +382,9 @@ def generate_codes(lm: Backbone, input_ids: np.ndarray, audio_mask: np.ndarray,
     for step, k in enumerate(sched):
         if k <= 0:
             continue
-        c_logits = lm(input_ids, audio_mask)[0, :, gen_start:, :].astype(np.float32)
+        c_logits = lm.cond(input_ids, audio_mask, gen_start, step).astype(np.float32)
         if cfg.guidance_scale != 0:
-            u_logits = lm(u_ids, u_mask)[0].astype(np.float32)
+            u_logits = lm.uncond(u_ids, u_mask).astype(np.float32)
             c_lp, u_lp = _log_softmax(c_logits), _log_softmax(u_logits)
             log_probs = _log_softmax(c_lp + cfg.guidance_scale * (c_lp - u_lp))
         else:
@@ -456,8 +529,14 @@ def cmd_generate(args) -> None:
           f"≈ {t_gen / FRAME_RATE:.2f}s target")
 
     lm_path = Path(args.lm or MODELS / "onnx" / "fp32" / "omnivoice_lm.onnx")
-    lm = Backbone(lm_path, args.threads)
-    print(f"backbone loaded in {lm.load_seconds:.1f}s  ({lm_path})")
+    if args.kv_cache:
+        lm = CachedBackbone(lm_path, args.threads, refresh_every=args.cache_refresh)
+        print(f"backbone loaded in {lm.load_seconds:.1f}s  ({lm_path})"
+              f"  [approx prefix KV cache, refresh_every="
+              f"{args.cache_refresh or 'never'}]")
+    else:
+        lm = Backbone(lm_path, args.threads)
+        print(f"backbone loaded in {lm.load_seconds:.1f}s  ({lm_path})")
 
     t0 = time.perf_counter()
     codes = generate_codes(lm, input_ids, audio_mask, gen_start, cfg, rng)
@@ -500,6 +579,9 @@ def cmd_generate(args) -> None:
         "load_seconds": round(lm.load_seconds, 3),
         "audio_seconds": round(dur, 3), "rtf": round(total / dur, 3),
         "model": str(lm_path), "threads": args.threads,
+        "kv_cache": bool(args.kv_cache),
+        "cache_refresh": int(args.cache_refresh),
+        "prefills": getattr(lm, "prefills", 0),
     }
     print(f"\n  {out}  {dur:.2f}s")
     print(f"  lm {lm.calls} calls / {lm.compute_seconds:.1f}s, "
@@ -541,6 +623,11 @@ def main() -> None:
     g.add_argument("--deterministic", action="store_true")
     g.add_argument("--seed", type=int, default=1234)
     g.add_argument("--threads", type=int, default=0)
+    g.add_argument("--kv-cache", action="store_true",
+                   help="use the approximate prefix KV cache; requires an "
+                        "--lm exported with `export_onnx.py --kv-cache`")
+    g.add_argument("--cache-refresh", type=int, default=0,
+                   help="recompute the prefix K/V every N steps (0 = never)")
     g.add_argument("--stats", default=None)
     g.add_argument("--out", default=None)
 

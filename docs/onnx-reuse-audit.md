@@ -134,7 +134,7 @@ the patterns to copy.
 
 `bluryar/omnivoice.cpp` and `rockerritesh/omnivoice-tts.cpp` run OmniVoice on ggml with
 no Python. ggml's ARM64 int4 kernels (`Q4_0` with `i8mm`/`dotprod`) are the best-tuned
-CPU matmuls on mobile and would very plausibly beat ORT by 2–3× on Exynos — and a
+CPU matmuls on mobile and might well beat ORT on ARM — and a
 `.so` + JNI is fully compatible with the brief's target architecture (the forbidden list
 is Termux / Chaquopy / CPython / PyTorch-Android, not native C++).
 

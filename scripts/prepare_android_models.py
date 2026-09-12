@@ -24,10 +24,18 @@ from _common import (  # noqa: E402
 
 DEST = MODELS / "android"
 
+# The backbone graph ships at accuracy_level 4 (`SQNBIT_CompInt8`), which is the
+# only compute type ONNX Runtime's ARM64 int4 kernels dispatch to -- worth 2.3x
+# RTF on device, for no measurable quality cost. See docs/benchmark.md §7.8b.
+# `set_accuracy_level.py` rewrites the attribute and reuses the same weight blob,
+# so `int4_acc4/` is a 1.4 MB graph pointing at `int4/`'s 422 MB of data.
+LM_DIR = MODELS / "onnx" / "int4_acc4"
+LM_DATA_DIR = MODELS / "onnx" / "int4"
+
 # generation path — always shipped
 CORE = [
-    (MODELS / "onnx" / "int4" / "omnivoice_lm.onnx", "omnivoice_lm.onnx"),
-    (MODELS / "onnx" / "int4" / "omnivoice_lm.onnx.data", "omnivoice_lm.onnx.data"),
+    (LM_DIR / "omnivoice_lm.onnx", "omnivoice_lm.onnx"),
+    (LM_DATA_DIR / "omnivoice_lm.onnx.data", "omnivoice_lm.onnx.data"),
     (HIGGS_ONNX_DIR / "higgs_decoder.onnx", "higgs_decoder.onnx"),
     (UPSTREAM_DIR / "tokenizer.json", "tokenizer.json"),
 ]
@@ -62,8 +70,11 @@ def main() -> None:
     items = CORE + (ENCODERS if args.with_encoders else [])
     missing = [str(s) for s, _ in items if not s.exists()]
     if missing:
-        sys.exit("missing inputs:\n  " + "\n  ".join(missing)
-                 + "\n\nrun download_models.py, export_onnx.py and sweep_quant.py first.")
+        hint = ("\n\nrun download_models.py, export_onnx.py and sweep_quant.py first.")
+        if not (LM_DIR / "omnivoice_lm.onnx").exists():
+            hint += ("\nfor the backbone graph specifically:\n"
+                     "  python scripts/set_accuracy_level.py --level 4")
+        sys.exit("missing inputs:\n  " + "\n  ".join(missing) + hint)
 
     files, total = {}, 0
     for src, name in items:
@@ -75,11 +86,12 @@ def main() -> None:
         files[name] = {"bytes": size, "sha256": sha256(dst)}
         print(f"  {size / 1e6:9.1f} MB  {name}")
 
-    variant = (MODELS / "onnx" / "int4" / "quant_variant.txt")
+    variant = (LM_DATA_DIR / "quant_variant.txt")
     manifest = {
         "schema": 1,
         "model": "k2-fsa/OmniVoice",
         "quant_variant": variant.read_text().strip() if variant.exists() else "unknown",
+        "accuracy_level": 4,
         "includes_encoders": args.with_encoders,
         "constants": {
             "num_codebooks": NUM_CODEBOOKS,

@@ -5,8 +5,16 @@ a phone**, with no network access at inference time — not "no network calls we
 but an APK that declares no `INTERNET` permission and gets `EPERM` from the kernel if it
 tries.
 
-```
-reference.wav + reference transcript + target text  ──►  cloned speech (24 kHz WAV)
+```mermaid
+flowchart LR
+    A["reference.wav"] --> E["enroll<br/><i>once per voice</i>"]
+    B["reference transcript"] --> E
+    E --> P["voice_prompt.bin<br/>1 766 bytes"]
+    P --> G["generate"]
+    C["target text"] --> G
+    G --> W["cloned speech<br/>24 kHz WAV"]
+
+    style W fill:#3a2a10,stroke:#eda13f,color:#f6f1ea
 ```
 
 **Status: all five levels of the brief reached on real hardware.** PC ONNX inference,
@@ -18,8 +26,9 @@ backend / thread / step benchmark — measured on a **Galaxy S26 Ultra (SM-S948N
 |---|---|
 | Deterministic ONNX vs PyTorch, re-masking NLL judge | **2.7325** vs **2.7672** — interchangeable, not merely close |
 | Fastest backend on device | **plain CPU**, 6 threads (XNNPACK +13 %, NNAPI +17 % slower) |
-| 6.0 s utterance, 16 steps, int4 | **38.1 s — RTF 6.3** |
-| Peak memory | **591 MB PSS** |
+| 5.4 s utterance, 16 steps, int4 | **19.4 s — RTF 3.6** |
+| 19.3 s utterance | **54.1 s — RTF 2.8** |
+| Peak memory | 769 MB PSS at S = 188, 1.45 GB at S = 757 |
 | Voice profile on disk | **1 766 bytes**, no audio kept |
 | Network permissions in the manifest | **none** |
 
@@ -153,8 +162,14 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 See [`docs/architecture.md`](docs/architecture.md). Short form:
 
-```
-Kotlin  →  ONNX Runtime 1.22 (Java API)  →  CPU / XNNPACK / NNAPI
+```mermaid
+flowchart LR
+    K["Kotlin"] --> O["ONNX Runtime 1.29<br/>Java API"]
+    O --> CPU["CPU · MLAS/NEON<br/>6 threads · int8 compute"]
+    O -.->|"measured slower"| X["XNNPACK"]
+    O -.->|"measured slower"| N["NNAPI"]
+
+    style CPU fill:#1a3020,stroke:#8fd6a0,color:#f6f1ea
 ```
 
 No Python on device. No Termux, Chaquopy, embedded CPython or PyTorch-Android.
@@ -177,8 +192,10 @@ All at int4, guidance 2.0, cold device. Full tables and method in
 
 | backend | threads | steps | audio | latency | RTF | peak PSS |
 |---|---:|---:|---:|---:|---:|---:|
-| **CPU** | **6** | **16** | 6.05 s | **38.1 s** | **6.3** | 591 MB |
-| CPU | 6 | 16 | 1.88 s | 18.5 s | 11.3 | 591 MB |
+| **CPU** | **6** | **16** | 19.28 s | **54.1 s** | **2.8** | 1.45 GB |
+| **CPU** | **6** | **16** | 5.35 s | **19.4 s** | **3.6** | — |
+| CPU (before §5.1) | 6 | 16 | 6.05 s | 38.1 s | 6.3 | 769 MB |
+| CPU (before §5.1) | 6 | 16 | 1.88 s | 18.5 s | 11.3 | 591 MB |
 | CPU | 6 | 8 | 1.88 s | 7.6 s | 5.4 | — |
 | CPU | 6 | 32 | 1.88 s | 40.5 s | 24.6 | — |
 | XNNPACK | 6 | 16 | 1.88 s | 20.5 s | 12.5 | — |
@@ -192,8 +209,8 @@ Two results in that table are worth reading twice.
 and 8 land on the prime cores and the whole step then waits on migration and shared thermal
 budget. 6 is the setting the app ships.
 
-**A longer sentence is cheaper per second.** RTF 6.3 for 6.0 s of audio against RTF 11.3 for
-1.9 s — the reference prefix is a fixed cost paid once per generation, so short utterances
+**A longer sentence is cheaper per second.** RTF 2.8 for 19.3 s of audio against RTF 3.6 for
+5.4 s — the reference prefix is a fixed cost paid once per generation, so short utterances
 amortise it over almost nothing. The app says so in the compose screen's hint rather than
 hiding it.
 
@@ -208,12 +225,23 @@ that "should" help.
 
 | technique | effect | why |
 |---|---|---|
+| **int8 compute (`accuracy_level=4`) + ORT 1.29** | **2.3x** | the shipping graph asked for fp32 compute, so ARM64's int4 kernels could never dispatch — see below |
 | int4 weight-only, block 32, audio head kept fp32 | 2.45 GB → **422 MB**, ~5.8x less to read per step | the graph is 85 % `MatMulNBits`; memory bandwidth is the wall |
 | `num_step` 32 → **16** | **2.2x** (RTF 24.6 → 11.3) | 16 keeps the judge score; the upstream default of 32 buys nothing measurable here |
 | 6 intra-op threads, not 8 | **1.5x** vs 8 threads | see above — the prime cores hurt |
 | CPU EP, not XNNPACK or NNAPI | **1.13x / 1.17x** vs those | §7.4 — with dynamic shapes both accelerators claim **0 of 2785 nodes** |
 | voice-prompt cache (`voice_prompt.bin`, 1 766 B) | the ~3 s encode happens **once per voice**, not once per sentence | the reference codes are all the model needs |
 | chunked long text + a batch queue | the fixed prefix cost is paid once for many sentences | measured: splitting per sentence roughly **doubles** total time |
+| offline-optimized graph, built on device at first launch | **load 1.47x** (1279 → 870 ms) | ORT keeps the external-data reference, so the saved file is 693 KB |
+
+**The largest single win was a default nobody had questioned.** `MatMulNBits` carries an
+`accuracy_level` attribute that picks the *compute* type of the int4 GEMM — it touches no
+stored weight. The shipping graph was at level 1 (dequantize to fp32, fp32 GEMM), so the
+85 % of device runtime that is `MatMulNBits` ran on the generic MLAS path and ONNX
+Runtime's ARM64 int4 kernels — which need int8 activations — could never dispatch. Level 4
+(`SQNBIT_CompInt8`) plus a runtime bump is worth **2.3x**, for no measurable quality cost
+across three seeds. Neither half works alone: the version bump gives 1.05x, the attribute
+alone 1.25x. Full working in [`docs/research-notes.md`](docs/research-notes.md) §5.1.
 
 **Tried, measured, and rejected — with the numbers:**
 
@@ -232,9 +260,11 @@ that "should" help.
   re-running fp32 with different sampling noise. §1.
 - **NNAPI with pinned shapes.** Gets the partitioner from 0 to 142 nodes, which then run
   **5.6x slower** than the whole graph on CPU.
-- **QNN / Hexagon.** The right target for this SoC, and blocked by the runtime rather than by
-  us: ORT 1.22's bundled QNN SDK predates SM8850 and ships V79 HTP skels against the device's
-  V81. §7.7.
+- **QNN / Hexagon.** The right accelerator for this SoC. The runtime blocker we hit — ORT
+  1.22's bundled QNN SDK shipping V79 HTP skels against the device's V81 — is gone in newer
+  ORT, but the project is not: the QNN EP still needs static bucketed shapes and a quantized
+  model with no `MatMulNBits` path, and our QDQ a16w8 attempt measured NLL 3.331, past the
+  noise floor, at 1209 ms against 766 ms on CPU. §7.7.
 
 **Identified, quantified, not yet taken:** the approximate **prefix KV cache**. Bidirectional
 attention forbids a cache across the generated region — that is §1.1's central finding — but
@@ -260,15 +290,15 @@ prefix range. That is the remaining lever.
 - **`guidance_scale = 0` is not a speed lever.** It produces pure silence.
 - **int4 has two hard constraints.** `/audio_heads/MatMul` must stay fp32 and the block size
   must be 32. §1.
-- **NNAPI does not help**, and is deprecated as of Android 15. Exynos's NPU would have been
-  reachable only via Samsung ENN SDK, for which ONNX Runtime has no execution provider; this
-  device is Qualcomm instead, which makes QNN the real option — see above.
+- **NNAPI does not help**, and is deprecated as of Android 15. The real accelerator option
+  on this device is QNN / Hexagon — see above.
 - **The reference transcript is typed by the user.** No Whisper in v1, by design. The app
   hands the user a script to read so the transcript is exact rather than remembered.
 - **Long text is expensive**, quadratically so — attention is `O(S²)` and `S` includes the
   reference prefix. Chunking is the mitigation, not a fix.
-- ORT Python here is 1.30 while the Android AAR on Maven Central is 1.22 — exports are pinned
-  to **opset 20** so the older runtime can load them.
+- Exports are pinned to **opset 20**; the Android AAR is 1.29 and loads them unchanged.
+- **Peak memory scales with utterance length** — 769 MB at S = 188, 1.45 GB at S = 757.
+  Comfortable inside 11.4 GB, but anything much longer should be chunked.
 
 ## Repository layout
 
@@ -280,6 +310,7 @@ docs/
   architecture.md      on-device component and session design
   benchmark.md         every measurement, PC and device, including the failed experiments
   feature-validation.md  each spec ID against what the device actually did
+  research-notes.md    the lab notebook — method, and every experiment that failed
 scripts/               PC-side: download, export, validate, ONNX reference inference,
                        quantization sweep, speed and codebook-ablation probes
 design/                the design canvas the app's screens were built from

@@ -220,6 +220,84 @@ class OnnxModelRunner(
         }
     }
 
+    /**
+     * Both classifier-free-guidance branches in ONE forward.
+     *
+     * The conditional branch is the whole sequence; the unconditional branch is
+     * the trailing MASK block alone. Running them as two sessions.run() calls
+     * pays ORT's per-call fixed cost (thread-pool wake-up plus ~2 400 shape and
+     * gather nodes whose cost does not scale with S) twice. Concatenating them
+     * into one sequence of S + T with a BLOCK-DIAGONAL attention mask — so
+     * neither branch can see the other — and per-branch position_ids is
+     * arithmetically identical: verified bit-identical logits on PC and device
+     * (docs/benchmark.md §7.10). Note this is not the same as batching the two
+     * branches, which would have to pad the short one up to S and would cost
+     * 2*S rows instead of S + T.
+     *
+     * Returns the logits over the concatenated sequence, `[8][S + T][1025]`
+     * flattened; conditional cell (c, t) is at `((c * (S+T)) + genStart + t)`,
+     * unconditional cell (c, t) at `((c * (S+T)) + S + t)`.
+     */
+    fun forwardFused(inputIds: Array<LongArray>, audioMask: BooleanArray,
+                     genStart: Int): FloatArray {
+        val s = audioMask.size
+        val t = s - genStart
+        val n = s + t
+
+        val idsBuf = ByteBuffer.allocateDirect(OV.NUM_CODEBOOKS * n * 8)
+            .order(ByteOrder.nativeOrder()).asLongBuffer()
+        for (c in 0 until OV.NUM_CODEBOOKS) {
+            idsBuf.put(inputIds[c], 0, s)
+            idsBuf.put(inputIds[c], genStart, t)
+        }
+        idsBuf.rewind()
+
+        val amBuf = boolBuffer(n)
+        for (i in 0 until s) amBuf.put(if (audioMask[i]) 1 else 0)
+        for (i in 0 until t) amBuf.put(1)          // the MASK block is all audio
+        amBuf.rewind()
+
+        val attnBuf = boolBuffer(n * n)
+        val condRow = ByteArray(n).also { java.util.Arrays.fill(it, 0, s, 1.toByte()) }
+        val uncRow = ByteArray(n).also { java.util.Arrays.fill(it, s, n, 1.toByte()) }
+        for (i in 0 until s) attnBuf.put(condRow)
+        for (i in 0 until t) attnBuf.put(uncRow)
+        attnBuf.rewind()
+
+        val posBuf = ByteBuffer.allocateDirect(n * 8)
+            .order(ByteOrder.nativeOrder()).asLongBuffer()
+        for (i in 0 until s) posBuf.put(i.toLong())
+        for (i in 0 until t) posBuf.put(i.toLong())
+        posBuf.rewind()
+
+        val tIds = OnnxTensor.createTensor(env, idsBuf, longArrayOf(1, OV.NUM_CODEBOOKS.toLong(), n.toLong()))
+        val tAm = OnnxTensor.createTensor(env, amBuf, longArrayOf(1, n.toLong()), ai.onnxruntime.OnnxJavaType.BOOL)
+        val tAttn = OnnxTensor.createTensor(env, attnBuf, longArrayOf(1, 1, n.toLong(), n.toLong()), ai.onnxruntime.OnnxJavaType.BOOL)
+        val tPos = OnnxTensor.createTensor(env, posBuf, longArrayOf(1, n.toLong()))
+
+        try {
+            val t0 = System.nanoTime()
+            val out = lm.run(mapOf("input_ids" to tIds, "audio_mask" to tAm,
+                                   "attention_mask" to tAttn, "position_ids" to tPos))
+            try {
+                val logits = (out[0] as OnnxTensor).floatBuffer
+                val result = FloatArray(logits.remaining())
+                logits.get(result)
+                lmComputeNanos += System.nanoTime() - t0
+                lmCalls++
+                return result
+            } finally {
+                out.close()
+            }
+        } catch (e: OutOfMemoryError) {
+            throw OmniVoiceException(OmniVoiceException.Kind.OUT_OF_MEMORY, "OOM in fused forward (N=$n)")
+        } catch (e: OrtException) {
+            throw OmniVoiceException(OmniVoiceException.Kind.GENERATION_FAILED, "fused forward failed (N=$n)", e)
+        } finally {
+            tIds.close(); tAm.close(); tAttn.close(); tPos.close()
+        }
+    }
+
     /** `codes` is `[8][T]`; returns a 24 kHz waveform. */
     fun decodeCodes(codes: Array<LongArray>): FloatArray {
         val t = codes[0].size

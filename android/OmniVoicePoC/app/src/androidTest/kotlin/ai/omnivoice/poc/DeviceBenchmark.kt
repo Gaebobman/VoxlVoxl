@@ -537,7 +537,21 @@ class DeviceBenchmark {
         when (lever) {
             "fusion" -> leverFusion(env, lmFile, threads, reps, p)
             "sessopts" -> leverSessOpts(env, lmFile, threads, reps, p)
+            "models" -> leverModels(env, threads, reps, p)
             "optmodel" -> leverOptModel(env, lmFile, threads, reps, p)
+            "loadtime" -> {
+                val opt = File(modelDir, "omnivoice_lm.opt.onnx")
+                assertTrue("run -e lever optmodel first", opt.isFile)
+                for (r in 0 until reps) {
+                    for ((tag, f) in listOf("original" to lmFile, "optimized" to opt.absolutePath)) {
+                        val t0 = System.nanoTime()
+                        env.createSession(f, sessionOptions(threads)).close()
+                        bench("lever_loadtime", "r=$r variant=$tag " +
+                            "load_ms=${(System.nanoTime() - t0) / 1_000_000}")
+                        System.gc()
+                    }
+                }
+            }
             else -> throw IllegalArgumentException("unknown lever $lever")
         }
     }
@@ -664,13 +678,94 @@ class DeviceBenchmark {
         } finally { sessions.forEach { it.close() } }
     }
 
+    /**
+     * Two model FILES interleaved in one process. Used for the MatMulNBits
+     * accuracy_level comparison: the two graphs differ only in that attribute
+     * and share one byte-identical `omnivoice_lm.onnx.data`, so the delta is
+     * the int4 GEMM compute path and nothing else.
+     *
+     *   -e lever models -e models omnivoice_lm.onnx,omnivoice_lm_acc4.onnx
+     */
+    private fun leverModels(
+        env: ai.onnxruntime.OrtEnvironment, threads: Int, reps: Int, p: Prompt,
+    ) {
+        val files = arg("models", "omnivoice_lm.onnx,omnivoice_lm_acc4.onnx")
+            .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        val names = ArrayList<String>()
+        val sessions = ArrayList<ai.onnxruntime.OrtSession>()
+        bench("lever_models_env", "ort=${ai.onnxruntime.OrtEnvironment.getAvailableProviders()}")
+        for (f in files) {
+            val file = File(modelDir, f)
+            assertTrue("$f not in $modelDir", file.isFile)
+            val t0 = System.nanoTime()
+            val sess = try {
+                env.createSession(file.absolutePath, sessionOptions(threads))
+            } catch (e: Throwable) {
+                bench("lever_models", "model=$f LOAD_FAILED ${e.javaClass.simpleName}: ${e.message}")
+                continue
+            }
+            names.add(f); sessions.add(sess)
+            bench("lever_models_load", "model=$f load_ms=${(System.nanoTime() - t0) / 1_000_000} " +
+                "inputs=${sess.inputNames} outputs=${sess.outputNames}")
+        }
+        try {
+            val (fc, fu) = splitFeeds(env, p)
+            val totals = LongArray(names.size)
+            val perRound = Array(names.size) { ArrayList<Long>() }
+            val first = arrayOfNulls<FloatArray>(names.size)
+            for (i in names.indices) {
+                runOnce(sessions[i], fc); first[i] = runOnce(sessions[i], fu).second
+            }
+            // numerical agreement between the two compute paths, on real logits
+            if (names.size > 1 && first[0] != null && first[1] != null) {
+                val a = first[0]!!; val b = first[1]!!
+                var maxAbs = 0.0f; var agree = 0; var cells = 0
+                val v = OV.AUDIO_VOCAB_SIZE
+                for (c in 0 until OV.NUM_CODEBOOKS) for (t in 0 until p.tGen) {
+                    var ba = 0; var bb = 0
+                    var va = Float.NEGATIVE_INFINITY; var vb = Float.NEGATIVE_INFINITY
+                    for (i in 0 until v) {
+                        val x = a[((c * p.tGen) + t) * v + i]; val y = b[((c * p.tGen) + t) * v + i]
+                        val d = Math.abs(x - y); if (d > maxAbs) maxAbs = d
+                        if (x > va) { va = x; ba = i }; if (y > vb) { vb = y; bb = i }
+                    }
+                    cells++; if (ba == bb) agree++
+                }
+                bench("lever_models_agreement", "a=${names[0]} b=${names[1]} " +
+                    "max_abs=$maxAbs argmax_agree=$agree/$cells")
+            }
+            for (r in 0 until reps) {
+                for (i in names.indices) {
+                    val ms = runOnce(sessions[i], fc).first + runOnce(sessions[i], fu).first
+                    totals[i] += ms; perRound[i].add(ms)
+                }
+                bench("lever_models_round", "r=$r " +
+                    names.indices.joinToString(" ") { "${names[it]}=${perRound[it][r]}" } +
+                    " thermal=${thermal()}")
+            }
+            val base = totals[0].toDouble()
+            for (i in names.indices) {
+                val sorted = perRound[i].sorted()
+                bench("lever_models", "model=${names[i]} mean_step_ms=${totals[i] / reps} " +
+                    "median_step_ms=${sorted[reps / 2]} min_step_ms=${sorted.first()} " +
+                    "speedup_vs_${names[0]}=${"%.3f".format(base / totals[i])} " +
+                    "est_lm_s_16steps=${"%.1f".format(sorted[reps / 2] * 16 / 1000.0)} all=${perRound[i]}")
+            }
+            (fc.values + fu.values).forEach { it.close() }
+        } finally { sessions.forEach { it.close() } }
+    }
+
     /** Offline graph optimization: does saving the optimized graph cut load time? */
     private fun leverOptModel(
         env: ai.onnxruntime.OrtEnvironment, lmFile: String,
         threads: Int, reps: Int, p: Prompt,
     ) {
-        val optDir = File(ctx.filesDir, "opt").apply { mkdirs() }
-        val optFile = File(optDir, "omnivoice_lm.onnx")
+        // The optimized graph keeps the external-data REFERENCE (`*.onnx.data`,
+        // resolved relative to the model file) and does not copy the 421 MB of
+        // weights, so it has to be written next to the original or it cannot be
+        // reopened. That also makes it cheap to ship: 0.7 MB beside the weights.
+        val optDir = modelDir
+        val optFile = File(optDir, "omnivoice_lm.opt.onnx")
 
         fun measure(path: String, tag: String, save: String? = null) {
             val t0 = System.nanoTime()
@@ -689,10 +784,65 @@ class DeviceBenchmark {
 
         measure(lmFile, "original_first")
         if (!optFile.isFile) measure(lmFile, "original_saving", save = optFile.absolutePath)
-        bench("lever_optmodel", "saved=${optFile.isFile} " +
-            "bytes=${optDir.listFiles()?.sumOf { it.length() } ?: 0} " +
-            "files=${optDir.listFiles()?.map { "${it.name}:${it.length()}" }}")
+        bench("lever_optmodel", "saved=${optFile.isFile} opt_bytes=${optFile.length()}")
         if (optFile.isFile) measure(optFile.absolutePath, "optimized")
         measure(lmFile, "original_again")
+    }
+
+    /**
+     * End-to-end A/B of the fused CFG forward, alternating within one process so
+     * DVFS drift falls out of the comparison. Deterministic + same seed, so the
+     * two paths must produce byte-identical audio.
+     */
+    @Test
+    fun t13_fusionEndToEnd() {
+        val vp = VoicePrompt.load(File(modelDir, "voice_prompt.bin"))
+        val profile = ai.omnivoice.poc.core.VoiceProfile(
+            id = "bench", displayName = "bench", codes = vp.codes,
+            refText = vp.refText, refRms = vp.refRms, sampleRate = vp.sampleRate)
+        val steps = arg("steps", "16").toInt()
+        val threads = arg("threads", "6").toInt()
+        val rounds = arg("rounds", "2").toInt()
+        val text = inputText("오늘 회의를 시작하겠습니다.")
+
+        // ONE session, the flag flipped between calls: two engines mean two
+        // 422 MB sessions and the device's memory manager kills the process.
+        val engine = OmniVoiceEngine(modelDir, Backend.CPU, threads,
+            cfg = GenConfig(numStep = steps), thermalStatus = { thermal() })
+        try {
+            engine.load()
+            var sTot = 0L; var fTot = 0L; var sLm = 0L; var fLm = 0L
+            var identical = true
+            var samples = 0
+            for (r in 0 until rounds) {
+                // split first on even rounds, fused first on odd: whichever runs
+                // first pays the colder-core advantage, so alternate the order
+                val order = if (r % 2 == 0) listOf(false, true) else listOf(true, false)
+                var a: ai.omnivoice.poc.core.AudioResult? = null
+                var b: ai.omnivoice.poc.core.AudioResult? = null
+                for (fuse in order) {
+                    engine.fuseCfg = fuse
+                    val res = engine.synthesize(text, profile, seed = 1234L, deterministic = true)
+                    if (fuse) b = res else a = res
+                }
+                sTot += a!!.metrics.totalMillis; fTot += b!!.metrics.totalMillis
+                sLm += a.metrics.generateMillis; fLm += b.metrics.generateMillis
+                if (a.samples.size != b.samples.size ||
+                    !a.samples.indices.all { a.samples[it] == b.samples[it] }) identical = false
+                samples = a.samples.size
+                bench("fusion_e2e_round", "r=$r order=${order.first()} " +
+                    "split_total=${a.metrics.totalMillis} fused_total=${b.metrics.totalMillis} " +
+                    "split_lm=${a.metrics.generateMillis} fused_lm=${b.metrics.generateMillis} " +
+                    "split_rtf=${"%.2f".format(a.metrics.rtf)} " +
+                    "fused_rtf=${"%.2f".format(b.metrics.rtf)} thermal=${thermal()}")
+            }
+            bench("fusion_e2e", "steps=$steps threads=$threads rounds=$rounds " +
+                "split_lm_ms=${sLm / rounds} fused_lm_ms=${fLm / rounds} " +
+                "lm_speedup=${"%.3f".format(sLm.toDouble() / fLm)} " +
+                "split_total_ms=${sTot / rounds} fused_total_ms=${fTot / rounds} " +
+                "total_speedup=${"%.3f".format(sTot.toDouble() / fTot)} " +
+                "audio_identical=$identical samples=$samples")
+            assertTrue("fused CFG changed the audio", identical)
+        } finally { engine.close() }
     }
 }

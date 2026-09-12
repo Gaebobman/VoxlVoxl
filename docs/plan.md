@@ -160,7 +160,7 @@ Explicit error surface (each with its own exception type and Logcat tag):
 
 ---
 
-## Phase 5 — CPU baseline on Galaxy S26+
+## Phase 5 — CPU baseline on Galaxy S26 Ultra
 
 - [ ] session options: `intra_op_num_threads` swept 1…8, `GraphOptimizationLevel.ALL_OPT`,
       `ExecutionMode.SEQUENTIAL`, arena allocator on
@@ -192,13 +192,12 @@ Known issue: ORT Android XNNPACK registration has aborted in some 1.2x builds
 
 Reality check before spending time here:
 
-- **NNAPI is deprecated as of Android 15**; the S26+ runs Android 16. ORT's NNAPI EP still
+- **NNAPI is deprecated as of Android 15**; the device runs Android 16. ORT's NNAPI EP still
   functions, but vendor coverage is frozen and `MatMulNBits` / `GroupQueryAttention` /
   `SimplifiedLayerNormalization` are contrib ops that NNAPI cannot take at all.
   Expect a heavily fragmented graph and a **slowdown**.
-- Exynos 2600's 80-TOPS NPU is reached through Samsung **ENN SDK / Exynos AI Studio**,
-  not through ORT. There is no Exynos EP in ONNX Runtime.
-  (`onnxruntime-android-qnn` is Qualcomm-only and irrelevant to an Exynos S26+.)
+- The device's Hexagon NPU is reached through `onnxruntime-android-qnn`, which needs
+  static shapes and a QDQ int8 model — a project of its own, not a flag.
 
 So the deliverable for this phase is **evidence, not acceleration**:
 
@@ -207,7 +206,7 @@ So the deliverable for this phase is **evidence, not acceleration**:
 - [ ] write down exactly which ops fell back and why
 - [ ] if NNAPI is slower than CPU — and it likely is — **say so and stop**, per the brief
 
-Stretch, only if everything above is green: evaluate ENN SDK / Exynos AI Studio for the
+Stretch, only if everything above is green: evaluate the QNN execution provider for the
 28-layer transformer block. Scoped as research with an explicit time box.
 
 ---
@@ -230,7 +229,7 @@ Stretch, only if everything above is green: evaluate ENN SDK / Exynos AI Studio 
 - [ ] PC-side ONNX validation script — `scripts/validate_onnx.py`
 - [ ] model download / preparation scripts — `scripts/download_models.py`, `scripts/export_onnx.py`
 - [ ] architecture documentation — `docs/architecture.md`, `docs/model-analysis.md`
-- [ ] Galaxy S26+ benchmark — `docs/benchmark.md`
+- [ ] Galaxy S26 Ultra benchmark — `docs/benchmark.md`
 - [ ] generated sample WAVs — `sample/`
 - [ ] README with exact reproduction steps — `README.md`
 - [ ] final answers to the four closing questions — `docs/benchmark.md` §Conclusion
