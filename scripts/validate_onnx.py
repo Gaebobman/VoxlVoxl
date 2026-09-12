@@ -135,8 +135,12 @@ def stage_lm(args) -> bool:
     gen = am[0]
     agree = float((got[0, :, gen].argmax(-1) == want[0, :, gen].argmax(-1)).mean())
     print(f"    {'argmax agreement (audio positions)':28s} {agree * 100:.3f} %")
-    ok = rel < 1e-3 and cos > 0.9999 and agree > 0.999
-    print(f"    {'PASS' if ok else 'FAIL'}")
+    # int4 is lossy by construction; judge it on argmax agreement and direction,
+    # not on the fp32 exactness bar.
+    lossy = "int4" in str(path) or "int8" in str(path)
+    ok = (cos > 0.99 and agree > 0.80) if lossy else (rel < 1e-3 and cos > 0.9999 and agree > 0.999)
+    print(f"    {'PASS' if ok else 'FAIL'}  (thresholds: "
+          f"{'lossy — cos>0.99, argmax>80%' if lossy else 'exact — rel<1e-3, cos>0.9999, argmax>99.9%'})")
     return ok
 
 
@@ -243,23 +247,93 @@ def stage_e2e(args) -> bool:
     return ok
 
 
+def stage_judge(args) -> bool:
+    """Score candidate outputs with the fp32 reference model, under the model's
+    own training objective.
+
+    Comparing generated codes across precisions is worthless: the un-masking loop
+    is chaotic, so one different token at step 1 changes everything downstream
+    (int8 agrees with fp32 on 89.6 % of single-forward argmaxes but only 13.8 %
+    of final codes).
+
+    So instead: take each candidate's codes, re-mask a random fraction of the
+    (codebook, frame) cells, and ask the fp32 reference to fill them back in.
+    That is exactly what OmniVoice was trained to do, so the numbers are real
+    likelihoods -- unlike scoring a fully-unmasked sequence, which is
+    out-of-distribution and yields perplexity above the 1024-way uniform bound.
+    """
+    print("\n[judge] fp32 reference re-masking score (lower NLL = more plausible codes)")
+    lm = _ort(Path(args.lm or MODELS / "onnx" / "fp32" / "omnivoice_lm.onnx"), args.threads)
+    ids0, am0, _ = _golden_prompt()
+
+    cands = sorted((OUT / "onnx").glob("*.codes.npy"))
+    if not cands:
+        print("    SKIP — no out/onnx/*.codes.npy; run infer_onnx.py generate first")
+        return True
+
+    ratios = (0.25, 0.5, 0.75)
+    seeds = (0, 1, 2)
+    rows = []
+    for c in cands:
+        codes = np.load(c).astype(np.int64)
+        T = codes.shape[1]
+        if ids0.shape[2] - T < 0:
+            print(f"    SKIP {c.name}: {T} frames does not fit S={ids0.shape[2]}")
+            continue
+        gen_start = ids0.shape[2] - T
+        per_ratio = []
+        for ratio in ratios:
+            nlls, accs = [], []
+            for seed in seeds:
+                rng = np.random.default_rng(seed)
+                sel = rng.random((NUM_CODEBOOKS, T)) < ratio
+                if not sel.any():
+                    continue
+                ids = ids0.copy()
+                ids[0, :, gen_start:] = np.where(sel, AUDIO_MASK_ID, codes)
+                logits = lm.run(["logits"], _feed(ids, am0))[0]
+                lp = logits[0, :, gen_start:, :1024].astype(np.float64)
+                lp -= lp.max(-1, keepdims=True)
+                lp -= np.log(np.exp(lp).sum(-1, keepdims=True))
+                true_lp = np.take_along_axis(lp, codes[:, :, None], -1)[..., 0]
+                nlls.append(float(-true_lp[sel].mean()))
+                accs.append(float((lp.argmax(-1)[sel] == codes[sel]).mean()))
+            per_ratio.append((float(np.mean(nlls)), float(np.mean(accs))))
+        mean_nll = float(np.mean([r[0] for r in per_ratio]))
+        rows.append((c.stem.replace(".codes", ""), T, mean_nll, per_ratio))
+
+    rows.sort(key=lambda r: r[2])
+    head = "  ".join(f"NLL@{int(r * 100)}" for r in ratios)
+    print(f"    {'candidate':20s} {'frames':>6} {'meanNLL':>8}   {head}   "
+          f"{'top1@50%':>8}")
+    for name, T, mean_nll, per in rows:
+        cells = "  ".join(f"{n:6.3f}" for n, _ in per)
+        print(f"    {name:20s} {T:6d} {mean_nll:8.4f}   {cells}   "
+              f"{per[1][1] * 100:7.2f}%")
+    print("    fp32 is scoring its own output, so it should lead; what matters is")
+    print("    whether a candidate sits inside the fp32 run-to-run spread.")
+    return True
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--stage", action="append",
-                    choices=["bidir", "lm", "codec", "dsp", "e2e", "all"], default=None)
+                    choices=["bidir", "lm", "codec", "dsp", "e2e", "judge", "all"],
+                    default=None)
     ap.add_argument("--lm", default=None, help="path to omnivoice_lm.onnx")
     ap.add_argument("--wav", default=None)
     ap.add_argument("--threads", type=int, default=0)
     args = ap.parse_args()
     stages = args.stage or ["all"]
     if "all" in stages:
-        stages = ["bidir", "lm", "codec", "dsp", "e2e"]
+        stages = ["bidir", "lm", "codec", "dsp", "e2e", "judge"]
 
     results = {}
     for s in stages:
         results[s] = {"bidir": stage_bidir, "lm": stage_lm, "codec": stage_codec,
-                      "dsp": stage_dsp, "e2e": stage_e2e}[s](args)
+                      "dsp": stage_dsp, "e2e": stage_e2e,
+                      "judge": stage_judge}[s](args)
 
     print("\n=== summary ===")
     for k, v in results.items():

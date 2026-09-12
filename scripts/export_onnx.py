@@ -148,9 +148,15 @@ def export_fp32(args) -> Path:
 
 
 def quantize_int4(args) -> Path:
-    """Weight-only int4 (block-wise RTN) -> com.microsoft::MatMulNBits."""
+    """Weight-only int4, block-wise RTN.
+
+    MatMul -> com.microsoft::MatMulNBits and Gather -> GatherBlockQuantized. The
+    Gather part is not optional: the tied text embedding is 151676 x 1024, i.e.
+    621 MB of the 2.45 GB fp32 graph, so leaving it alone would cap the model at
+    ~840 MB no matter what happens to the transformer stack.
+    """
     import onnx
-    from onnxruntime.quantization import matmul_4bits_quantizer as q4
+    from onnxruntime.quantization import matmul_nbits_quantizer as qn
 
     src = Path(args.source or MODELS / "onnx" / "fp32" / "omnivoice_lm.onnx")
     if not src.exists():
@@ -159,21 +165,29 @@ def quantize_int4(args) -> Path:
     outdir.mkdir(parents=True, exist_ok=True)
     target = outdir / "omnivoice_lm.onnx"
 
-    print(f"quantizing {src} → int4 (block {args.block_size}, RTN, "
-          f"accuracy_level={args.accuracy_level}) ...")
+    op_types = tuple(args.op_types)
+    print(f"quantizing {src} -> int4 (block {args.block_size}, "
+          f"{'symmetric' if args.symmetric else 'asymmetric'}, "
+          f"accuracy_level={args.accuracy_level}, ops={op_types}, "
+          f"excluded={args.exclude}) ...")
     m = onnx.load(str(src), load_external_data=True)
-    cfg = q4.RTNWeightOnlyQuantConfig(
-        block_size=args.block_size, is_symmetric=True,
+    quant = qn.MatMulNBitsQuantizer(
+        m, bits=4, block_size=args.block_size, is_symmetric=args.symmetric,
         accuracy_level=args.accuracy_level,
+        op_types_to_quantize=op_types,
+        quant_axes=(("Gather", 1),),
+        nodes_to_exclude=args.exclude or None,
     )
-    quant = q4.MatMul4BitsQuantizer(m, algo_config=cfg, nodes_to_exclude=args.exclude or None)
     t0 = time.perf_counter()
     quant.process()
     print(f"quantized in {time.perf_counter() - t0:.1f}s")
 
+    out_model = quant.model.model if hasattr(quant.model, "model") else quant.model
+    if not isinstance(out_model, onnx.ModelProto):
+        out_model = onnx.load(str(out_model)) if isinstance(out_model, (str, Path)) else out_model
     for f in (target, target.with_suffix(".onnx.data")):
         f.unlink(missing_ok=True)
-    onnx.save_model(quant.model.model, str(target), save_as_external_data=True,
+    onnx.save_model(out_model, str(target), save_as_external_data=True,
                     all_tensors_to_one_file=True,
                     location=target.name + ".data", size_threshold=1024)
     _report(target)
@@ -239,11 +253,18 @@ def main() -> None:
     ap.add_argument("--out", default=None)
     ap.add_argument("--trace-seq", type=int, default=24)
     ap.add_argument("--source", default=None, help="int4: fp32 graph to quantize")
-    ap.add_argument("--block-size", type=int, default=128)
+    ap.add_argument("--block-size", type=int, default=32,
+                    help="32 is the measured sweet spot; 128 falls outside the "
+                         "fp32 run-to-run band (docs/benchmark.md)")
     ap.add_argument("--accuracy-level", type=int, default=4,
                     help="MatMulNBits accuracy_level; 4 = int8 compute (fastest on ARM)")
-    ap.add_argument("--exclude", nargs="*", default=None,
-                    help="node names to keep at full precision")
+    ap.add_argument("--op-types", nargs="*", default=["MatMul", "Gather"],
+                    help="op types to quantize; Gather covers the tied text embedding")
+    ap.add_argument("--exclude", nargs="*", default=["/audio_heads/MatMul"],
+                    help="node names to keep at full precision; the audio head "
+                         "sits directly on the logits and must not be int4")
+    ap.add_argument("--symmetric", action="store_true",
+                    help="symmetric RTN (measurably worse; kept for reproduction)")
     args = ap.parse_args()
     (export_fp32 if args.precision == "fp32" else quantize_int4)(args)
 
