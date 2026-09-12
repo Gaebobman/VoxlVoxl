@@ -619,6 +619,65 @@ the voice quality and needs a re-export carrying `past_key_values` I/O on the
 prefix range only. That is the one identified, quantified, un-taken speedup left,
 and it is a day of work on the export, not a flag.
 
+### 7.8b The shipping model asks for fp32 compute, and §7.7 was reading a stale Maven
+
+Two things this section previously got wrong, both found by reading the artifacts
+rather than the documentation.
+
+**`accuracy_level` was never actually swept.** It selects the *compute* type of an
+int4 GEMM and touches no stored weight: level 1 is fp32 compute, level 4 is
+`SQNBIT_CompInt8` — the quantised-activation path, and the only one ONNX Runtime's
+ARM64 KleidiAI int4 kernels will dispatch to. Reading the attributes straight out
+of the graphs:
+
+```
+models/onnx/int4/omnivoice_lm.onnx        (bits, block, accuracy_level) -> {(4, 32, 1): 196}
+models/onnx/int4_kv/omnivoice_lm_kv.onnx                                -> {(4, 32, 4): 196}
+```
+
+The shipping export is at **level 1**, so the 85 % of device runtime that is
+`MatMulNBits` runs on the generic MLAS fp32-compute path. §1's note that
+"accuracy_level 4 cost 75 points of argmax agreement" is about `sym_acc4_mg`,
+which was *also* symmetric, block-128 and int4-headed — the three things §1
+independently proves are fatal. Level 4 on top of `android_b32` was never isolated.
+
+`scripts/set_accuracy_level.py` rewrites the attribute and copies the external-data
+blob verbatim, so the same weights can be judged both ways. Re-masking NLL against
+the fp32 scorer, three seeds each:
+
+| | seed 1234 | seed 7 | seed 99 | mean |
+|---|---:|---:|---:|---:|
+| acc1 (shipping) | 2.8722 | 2.9477 | **3.1080** | 2.976 |
+| acc4 | 3.0443 | 2.9853 | 2.9833 | 3.004 |
+
+**The distributions overlap completely** — acc1's worst seed scores worse than
+acc4's worst. The seed-to-seed spread of 0.236 swamps the 0.028 difference in
+means, and both sit under the 3.116 stochastic-fp32 noise floor from §1. A single
+seed would have said level 4 costs 0.17 nats; it does not. There is no measurable
+quality reason not to ship level 4.
+
+**ORT Android is eight releases newer than §7.7 assumed.** `maven-metadata.xml`
+for `com.microsoft.onnxruntime:onnxruntime-android` lists through **1.29.0**
+(`lastUpdated 20260812`); 1.24.1, 1.25.0 and 1.29.0 all resolve. The Maven
+*solrsearch* API still reports 1.22.0 as newest and is what produced the earlier
+conclusion — it is stale, and `maven-metadata.xml` is the authority. KleidiAI
+asymmetric-int4 kernels for `MatMulNBits` landed in 1.25.0 and 1.29.0, which means
+the pairing that matters is a runtime bump *and* the attribute, since neither is
+any use without the other.
+
+**A caution before projecting the published KleidiAI numbers onto this device:
+it has SME1, not SME2.** The full feature line:
+
+```
+… sve sve2 svei8mm svebf16 i8mm bf16 … sme smei8i32 smef16f32 smeb16f32 smef32f32 lrcpc3
+```
+
+No `sme2`. Most of the reported uplift in that work is attributed to SME2 kernels,
+so only the **i8mm / dotprod** path can dispatch here. The device measurement is
+pending and is the only one worth quoting: PC timings taken while other jobs
+shared the machine varied 6.6–12.4 s for the same configuration and are not
+evidence of anything.
+
 ### 7.9 Codebook ablation — which layers of the RVQ actually matter
 
 The UI claims the voice's outline resolves before its detail, which is a claim
