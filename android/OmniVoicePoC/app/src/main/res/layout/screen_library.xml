@@ -40,6 +40,7 @@
     <Space android:layout_width="match_parent" android:layout_height="7dp" />
 
     <TextView
+        android:id="@+id/voicesBody"
         style="@style/Voxl.Body"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -74,51 +75,36 @@
     <Space android:layout_width="match_parent" android:layout_height="12dp" />
 
     <LinearLayout
+        android:id="@+id/privacyRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/glass_chip"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="15dp">
+        android:paddingTop="10dp"
+        android:paddingBottom="4dp">
 
         <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginTop="2dp"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_shield" />
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/privacyLine"
+            style="@style/Voxl.Caption"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="11dp"
+            android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/pretendard"
-                android:text="@string/privacy_title"
-                android:textColor="@color/text"
-                android:textFontWeight="500"
-                android:textSize="12.5sp" />
-
-            <TextView
-                style="@style/Voxl.Caption"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/privacy_body"
-                android:textSize="11.5sp" />
-        </LinearLayout>
+            android:text="@string/privacy_short"
+            android:textSize="11sp" />
     </LinearLayout>
-
-    <Space android:layout_width="match_parent" android:layout_height="10dp" />
 
     <Button
         android:id="@+id/goCompose"
         style="@style/Voxl.Button"
         android:layout_width="match_parent"
         android:layout_height="56dp"
+        android:layout_marginTop="8dp"
         android:text="@string/compose_go" />
 </LinearLayout>

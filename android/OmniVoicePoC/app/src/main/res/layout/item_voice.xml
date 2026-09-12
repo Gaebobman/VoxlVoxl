@@ -1,35 +1,71 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One enrolled voice. The waveform is the reference itself, so a whispered
-     profile visibly differs from a spoken one before you play either. -->
+<!--
+  A voice, collapsed by default.
+  The card used to be ~200dp tall because every one of them carried its quote and
+  three buttons, so four profiles meant scrolling past a screenful of controls
+  nobody was reaching for. Only the selected card expands; the rest are a row.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="10dp"
+    android:layout_marginBottom="8dp"
     android:background="@drawable/glass_card"
     android:orientation="vertical"
-    android:padding="14dp">
+    android:paddingStart="14dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="14dp"
+    android:paddingBottom="12dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:baselineAligned="false"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/voiceName"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:fontFamily="@font/pretendard"
-            android:textColor="@color/text"
-            android:textFontWeight="600"
-            android:textSize="15sp" />
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/voiceName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/pretendard"
+                    android:textColor="@color/text"
+                    android:textFontWeight="600"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/voiceDuration"
+                    style="@style/Voxl.Readout"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <ai.omnivoice.poc.ui.CodeStripView
+                android:id="@+id/voiceWave"
+                android:layout_width="match_parent"
+                android:layout_height="18dp"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/voiceBadge"
             style="@style/Voxl.Label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="9dp"
+            android:layout_marginStart="10dp"
             android:background="@drawable/badge_amber"
             android:paddingStart="8dp"
             android:paddingTop="3dp"
@@ -39,71 +75,66 @@
             android:textFontWeight="600"
             android:textSize="9sp"
             android:visibility="gone" />
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
-        <TextView
-            android:id="@+id/voiceDuration"
-            style="@style/Voxl.Readout"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="11sp" />
     </LinearLayout>
 
-    <ai.omnivoice.poc.ui.CodeStripView
-        android:id="@+id/voiceWave"
-        android:layout_width="match_parent"
-        android:layout_height="26dp"
-        android:layout_marginTop="11dp" />
-
-    <TextView
-        android:id="@+id/voiceQuote"
-        style="@style/Voxl.Caption"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:ellipsize="end"
-        android:maxLines="2" />
-
+    <!-- everything below only appears on the selected card -->
     <LinearLayout
+        android:id="@+id/voiceExpanded"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="11dp"
-        android:orientation="horizontal">
+        android:orientation="vertical"
+        android:visibility="gone">
 
-        <Button
-            android:id="@+id/voiceTest"
-            style="@style/Voxl.Chip"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_weight="1"
-            android:text="@string/test"
-            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/voiceQuote"
+            style="@style/Voxl.Caption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textSize="11.5sp" />
 
-        <Space android:layout_width="7dp" android:layout_height="1dp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/voiceRerecord"
-            style="@style/Voxl.Chip"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_weight="1"
-            android:text="@string/rerecord"
-            android:textSize="12sp" />
+            <Button
+                android:id="@+id/voiceTest"
+                style="@style/Voxl.Chip"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:minHeight="0dp"
+                android:text="@string/test"
+                android:textSize="12sp" />
 
-        <Space android:layout_width="7dp" android:layout_height="1dp" />
+            <Space android:layout_width="6dp" android:layout_height="1dp" />
 
-        <Button
-            android:id="@+id/voiceDelete"
-            style="@style/Voxl.Chip"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_weight="1"
-            android:text="@string/delete"
-            android:textColor="@color/rec"
-            android:textSize="12sp" />
+            <Button
+                android:id="@+id/voiceRerecord"
+                style="@style/Voxl.Chip"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:minHeight="0dp"
+                android:text="@string/rerecord"
+                android:textSize="12sp" />
+
+            <Space android:layout_width="6dp" android:layout_height="1dp" />
+
+            <Button
+                android:id="@+id/voiceDelete"
+                style="@style/Voxl.Chip"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:minHeight="0dp"
+                android:text="@string/delete"
+                android:textColor="@color/rec"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

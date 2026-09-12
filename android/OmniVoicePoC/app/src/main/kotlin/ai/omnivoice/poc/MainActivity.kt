@@ -125,7 +125,14 @@ class MainActivity : AppCompatActivity() {
 
         bindService(Intent(this, SynthesisService::class.java), connection, Context.BIND_AUTO_CREATE)
 
-        show(if (modelsReady()) Screen.LIBRARY else Screen.FIRST_RUN)
+        // Compose is the screen you use every time; the voice library is the one
+        // you use once. Opening on the library meant scrolling past it to reach
+        // the thing you actually came for.
+        show(when {
+            !modelsReady() -> Screen.FIRST_RUN
+            profileList.isEmpty() -> Screen.LIBRARY
+            else -> Screen.COMPOSE
+        })
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = goBack()
@@ -155,8 +162,9 @@ class MainActivity : AppCompatActivity() {
             Screen.DEV -> show(previous)
             Screen.ENROLL -> { cancelRecording(); show(Screen.LIBRARY) }
             Screen.VERIFY -> show(Screen.ENROLL)
-            Screen.COMPOSE -> show(Screen.LIBRARY)
+            Screen.COMPOSE -> if (profileList.isEmpty()) show(Screen.LIBRARY) else finish()
             Screen.RESULT -> show(Screen.COMPOSE)
+            Screen.LIBRARY -> if (profileList.isEmpty()) finish() else show(Screen.COMPOSE)
             Screen.GENERATING -> toast("생성 중입니다 — 취소를 누르세요")
             else -> finish()
         }
@@ -179,6 +187,7 @@ class MainActivity : AppCompatActivity() {
         id<Button>(R.id.goCompose).setOnClickListener {
             if (profileList.isEmpty()) toast("먼저 목소리를 등록하세요") else show(Screen.COMPOSE)
         }
+        id<ImageButton>(R.id.composeBack).setOnClickListener { show(Screen.LIBRARY) }
 
         id<Button>(R.id.enrollRecord).setOnClickListener {
             if (recorder.isRecording) finishRecording()
@@ -211,7 +220,9 @@ class MainActivity : AppCompatActivity() {
         })
 
         val tagRow = id<LinearLayout>(R.id.tagRow)
-        for (tag in OmniVoiceStyle.NON_VERBAL_VERIFIED) {
+        // surprise-ah and surprise-oh both read "놀람", so the row showed it twice
+        // and pushed the last chip off the edge. One chip per distinct label.
+        for (tag in OmniVoiceStyle.NON_VERBAL_VERIFIED.distinctBy { tagLabel(it) }) {
             tagRow.addView(chip(tagLabel(tag)) { insertTag("[$tag]") }, chipParams())
         }
     }
@@ -230,12 +241,18 @@ class MainActivity : AppCompatActivity() {
         setTextColor(getColor(R.color.text))
         isAllCaps = false
         stateListAnimator = null
+        textSize = 12f
+        // five chips have to fit 390dp without the last one being sliced in half
+        val pad = (11 * resources.displayMetrics.density).toInt()
+        minWidth = 0
+        minimumWidth = 0
+        setPadding(pad, 0, pad, 0)
         setOnClickListener { onClick() }
     }
 
     private fun chipParams() = LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.WRAP_CONTENT, (44 * resources.displayMetrics.density).toInt()
-    ).apply { marginEnd = (7 * resources.displayMetrics.density).toInt() }
+    ).apply { marginEnd = (6 * resources.displayMetrics.density).toInt() }
 
     private fun insertTag(s: String) {
         val f = id<EditText>(R.id.targetText)
@@ -249,6 +266,10 @@ class MainActivity : AppCompatActivity() {
         if (selected == null || profileList.none { it.id == selected!!.id }) {
             selected = profileList.firstOrNull()
         }
+        id<TextView>(R.id.voicesBody).visibility =
+            if (profileList.isEmpty()) View.VISIBLE else View.GONE
+        id<View>(R.id.privacyRow).visibility =
+            if (profileList.isEmpty()) View.VISIBLE else View.GONE
         val list = id<LinearLayout>(R.id.voiceList)
         list.removeAllViews()
         if (profileList.isEmpty()) {
@@ -265,22 +286,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun voiceCard(p: VoiceProfile, parent: ViewGroup): View {
         val v = LayoutInflater.from(this).inflate(R.layout.item_voice, parent, false)
-        v.isSelected = p.id == selected?.id
+        val expanded = p.id == selected?.id
+        v.isSelected = expanded
+        v.findViewById<View>(R.id.voiceExpanded).visibility =
+            if (expanded) View.VISIBLE else View.GONE
         v.findViewById<TextView>(R.id.voiceName).text = p.displayName
         v.findViewById<TextView>(R.id.voiceDuration).text =
             "%.1f초".format(p.frames.toFloat() / OV.FRAME_RATE)
         v.findViewById<TextView>(R.id.voiceQuote).text = "“${p.refText}”"
         v.findViewById<TextView>(R.id.voiceBadge).apply {
             text = "사용 중"
-            visibility = if (p.id == selected?.id) View.VISIBLE else View.GONE
+            visibility = if (expanded) View.VISIBLE else View.GONE
         }
         // The recording is deliberately not kept, so there is no waveform to
         // draw. The card shows the 1.8 kB that IS kept — the codec codes.
         v.findViewById<CodeStripView>(R.id.voiceWave).apply {
-            tone = if (p.id == selected?.id) CodeStripView.Tone.AMBER else CodeStripView.Tone.VIOLET
+            tone = if (expanded) CodeStripView.Tone.AMBER else CodeStripView.Tone.VIOLET
             setCodes(p.codes)
         }
-        v.setOnClickListener { selected = p; refreshVoices() }
+        // Tapping an already-selected voice is the confirmation, so it goes
+        // straight back to composing rather than needing the button below.
+        v.setOnClickListener {
+            if (expanded) show(Screen.COMPOSE) else { selected = p; refreshVoices() }
+        }
         v.findViewById<Button>(R.id.voiceTest).setOnClickListener { testVoice(p) }
         v.findViewById<Button>(R.id.voiceRerecord).setOnClickListener { startEnroll(p) }
         v.findViewById<Button>(R.id.voiceDelete).setOnClickListener { confirmDelete(p) }
@@ -431,6 +459,7 @@ class MainActivity : AppCompatActivity() {
         id<TextView>(R.id.composeVoiceMeta).text =
             p?.let { "%.1f초 참조".format(it.frames.toFloat() / OV.FRAME_RATE) } ?: ""
         id<LinearLayout>(R.id.composeVoice).setOnClickListener { show(Screen.LIBRARY) }
+        id<TextView>(R.id.composeVoiceHint).text = getString(R.string.change_voice)
         updateEstimate()
     }
 

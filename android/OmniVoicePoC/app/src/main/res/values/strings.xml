@@ -14,6 +14,7 @@
     <string name="voices_add">새 말투 등록</string>
     <string name="voices_none">아직 등록된 목소리가 없습니다</string>
     <string name="privacy_title">이 기기 밖으로 나가지 않습니다</string>
+    <string name="privacy_short">이 기기 밖으로 나가지 않습니다 · 녹음 원본 미저장</string>
     <string name="privacy_body">앱에 네트워크 권한 자체가 없습니다. 녹음 원본은 저장하지 않고, 목소리 하나가 1.8 kB의 숫자로만 남습니다.</string>
     <string name="test">테스트</string>
     <string name="rerecord">재녹음</string>
@@ -42,6 +43,7 @@
     <!-- compose -->
     <string name="compose_hint">말하게 할 내용</string>
     <string name="compose_go">내 목소리로 만들기</string>
+    <string name="change_voice">목소리 바꾸기</string>
     <string name="compose_batch">여러 문장을 한 번에 넣는 편이 빠릅니다 — 문장마다 나누면 총 시간이 약 2배</string>
     <string name="no_voice">목소리 없이 (보이스 디자인)</string>
 
