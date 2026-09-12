@@ -59,6 +59,21 @@ class DeviceBenchmark {
 
     private fun bench(tag: String, msg: String) = Log.i(TAG, "RESULT $tag $msg")
 
+    /**
+     * `-e text "..."` cannot carry spaces through `adb shell am instrument`, so
+     * long inputs are read from a file instead: `-e textfile long.txt`, relative
+     * to the model directory.
+     */
+    private fun inputText(default: String): String {
+        val name = arg("textfile", "")
+        if (name.isNotBlank()) {
+            val f = File(modelDir, name)
+            if (!f.isFile) throw IllegalStateException("textfile $name not found in $modelDir")
+            return f.readText(Charsets.UTF_8).trim()
+        }
+        return arg("text", default)
+    }
+
     @Test
     fun t01_modelsArePresent() {
         assertTrue("$modelDir missing — adb push models/android/", modelDir.isDirectory)
@@ -114,7 +129,7 @@ class DeviceBenchmark {
             engine.preload()
             for (i in 1..runs) {
                 val r = engine.generate(
-                    text = arg("text", "오늘 회의를 시작하겠습니다."),
+                    text = inputText("오늘 회의를 시작하겠습니다."),
                     prompt = prompt, language = "ko", cfg = GenConfig(numStep = steps),
                 )
                 val thermal = runCatching { power.currentThermalStatus }.getOrDefault(-1)
@@ -192,7 +207,7 @@ class DeviceBenchmark {
         val backend = Backend.valueOf(arg("backend", "CPU"))
         val threads = arg("threads", "0").toInt()
         val steps = arg("steps", "16").toInt()
-        val text = arg("text", "오늘 회의를 시작하겠습니다.")
+        val text = inputText("오늘 회의를 시작하겠습니다.")
         val cfg = GenConfig(numStep = steps)
 
         Runtime.getRuntime().gc()

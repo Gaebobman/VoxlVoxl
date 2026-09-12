@@ -410,6 +410,34 @@ experiment, and it only exists because the device turned out to be a Snapdragon 
 an Exynos 2600 would have offered NNAPI (deprecated) or Samsung's ENN SDK, for
 which ONNX Runtime has no execution provider at all.
 
+### 7.6b Utterance length — short sentences are the expensive case
+
+RTF is not a constant. The prompt carries a fixed cost — 37 text tokens plus 103
+reference frames — that is re-paid at every one of the 32 forwards regardless of
+how much audio comes out, so it amortises over longer outputs. Measured, CPU,
+6 threads, 16 steps:
+
+| text | audio | S | LM time | total | **RTF** | peak PSS |
+|---|---:|---:|---:|---:|---:|---:|
+| "네, 알겠습니다." | 1.26 s | 178 | 16.9 s | 19.0 s | **15.08** | 629 MB |
+| "오늘 회의를 시작하겠습니다." | 1.88 s | 188 | 18.7 s | 21.1 s | **11.21** | 594 MB |
+| three sentences | 10.57 s | 444 | 68.3 s | 79.1 s | **7.48** | 882 MB |
+
+A simple cost model — `(S_cond + T_gen) / T_gen` units per generated frame —
+predicts 0.52× relative RTF at `T_gen = 250`; measured was 7.48 / 15.08 =
+**0.50×**. The model holds, which makes it usable for the UI's time estimate.
+
+Two consequences for the product:
+
+1. **Generate whole messages, not sentence by sentence.** Splitting a paragraph
+   into short utterances roughly doubles the total work, because each fragment
+   re-pays the reference prefix. This is the opposite of the usual TTS intuition.
+2. **Memory scales with `S`, and faster than the tensors alone suggest.** Peak
+   PSS went 594 MB → 882 MB (native 616 MB) between S = 188 and S = 444. Upstream
+   chunks above 30 s for this reason; by the cost model chunking 30 s into 2×15 s
+   costs about 8 % more compute but bounds peak memory, so it is a memory guard
+   rather than a speed feature.
+
 ### 7.7 QNN / Hexagon — attempted, and blocked by the runtime, not by us
 
 §7.5 listed what a QNN path needs. All of it was built, and it still does not run
