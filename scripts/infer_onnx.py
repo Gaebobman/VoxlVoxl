@@ -455,8 +455,19 @@ def cmd_generate(args) -> None:
     wav = dec.run(["waveform_24k"], {"codes": codes[:, None, :]})[0].squeeze()
     t_vocoder = time.perf_counter() - t0
 
-    wav = post_process(wav.astype(np.float32), ref_rms, cfg)
+    raw = wav.astype(np.float32)
+    wav = post_process(raw, ref_rms, cfg)
     dur = len(wav) / SR_24K
+    if dur <= 0.0:
+        print(f"\n  GENERATION FAILED: {len(raw) / SR_24K:.2f}s of vocoder output was "
+              f"entirely below the -50 dBFS silence floor.\n"
+              f"  The model produced silence, not a short clip. Most common cause: "
+              f"guidance_scale=0 — classifier-free guidance is not optional for "
+              f"OmniVoice.\n  peak={float(np.abs(raw).max()):.2e} "
+              f"rms={float(np.sqrt((raw ** 2).mean())):.2e}")
+        write_wav(Path(args.out or OUT / "onnx" / "cloned.wav").with_suffix(".raw.wav"),
+                  raw, SR_24K)
+        sys.exit(2)
     out = Path(args.out or OUT / "onnx" / "cloned.wav")
     write_wav(out, wav, SR_24K)
 
