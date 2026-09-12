@@ -1,0 +1,34 @@
+# --- large model artifacts: never commit ---
+models/**
+!models/README.md
+*.onnx
+*.onnx.data
+*.onnx_data*
+*.safetensors
+*.bin
+*.pt
+*.gguf
+
+# --- generated audio / benchmark output ---
+out/
+*.wav
+!sample/reference.wav
+
+# --- python ---
+.venv/
+__pycache__/
+*.pyc
+.uv/
+
+# --- android ---
+android/**/build/
+android/**/.gradle/
+android/**/local.properties
+*.apk
+*.aab
+.idea/
+.cxx/
+
+# --- misc ---
+.DS_Store
+scratch/
