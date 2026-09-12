@@ -49,6 +49,12 @@ class GenConfig:
         self.layer_penalty_factor = kw.get("layer_penalty_factor", 5.0)
         self.position_temperature = kw.get("position_temperature", 5.0)
         self.class_temperature = kw.get("class_temperature", 0.0)
+        # Confidence-aware parallel decoding (Fast-dLLM, arXiv:2505.22618):
+        # instead of committing exactly k cells per step, commit every cell the
+        # model is already sure about. The fixed schedule is kept as a FLOOR so
+        # the loop can never stall, and the loop exits as soon as nothing is
+        # masked — which is the actual saving.
+        self.confidence_threshold = kw.get("confidence_threshold", 0.0)
         self.denoise = kw.get("denoise", True)
         self.postprocess_output = kw.get("postprocess_output", True)
         self.pad_duration = kw.get("pad_duration", 0.1)
@@ -322,17 +328,28 @@ def generate_codes(lm: Backbone, input_ids: np.ndarray, audio_mask: np.ndarray,
         scores = np.where(tokens != AUDIO_MASK_ID, -np.inf, scores)
 
         flat = scores.ravel()
-        k = min(k, int(np.isfinite(flat).sum()))
+        available = int(np.isfinite(flat).sum())
+        k = min(k, available)
         if k <= 0:
             continue
+        if cfg.confidence_threshold > 0:
+            # probability of the chosen token, per cell, masked cells only
+            conf = np.exp(log_probs.max(-1))
+            conf = np.where(tokens != AUDIO_MASK_ID, -1.0, conf).ravel()
+            confident = int((conf > cfg.confidence_threshold).sum())
+            k = min(max(k, confident), available)
         top = np.argpartition(-flat, k - 1)[:k]
         tokens.ravel()[top] = pred.ravel()[top]
 
         input_ids[0, :, gen_start:] = tokens
         u_ids[0] = tokens
+        left = int((tokens == AUDIO_MASK_ID).sum())
         if progress and ((step + 1) % 8 == 0 or step == 0):
-            left = int((tokens == AUDIO_MASK_ID).sum())
             print(f"    step {step + 1:3d}/{cfg.num_step}  {left:5d} cells masked", flush=True)
+        if left == 0:
+            if progress:
+                print(f"    finished early at step {step + 1}/{cfg.num_step}", flush=True)
+            break
 
     leftover = int((tokens == AUDIO_MASK_ID).sum())
     if leftover:
@@ -416,7 +433,8 @@ def cmd_generate(args) -> None:
 
     cfg = GenConfig(num_step=args.num_step, guidance_scale=args.guidance_scale,
                     t_shift=args.t_shift, denoise=args.denoise,
-                    postprocess_output=args.postprocess)
+                    postprocess_output=args.postprocess,
+                    confidence_threshold=args.confidence_threshold)
     if args.deterministic:
         cfg.position_temperature = 0.0
     rng = np.random.default_rng(args.seed)
@@ -474,6 +492,7 @@ def cmd_generate(args) -> None:
     total = t_decode_loop + t_vocoder
     stats = {
         "S": int(S), "T_gen": int(t_gen), "num_step": cfg.num_step,
+        "confidence_threshold": cfg.confidence_threshold,
         "guidance_scale": cfg.guidance_scale, "lm_calls": lm.calls,
         "lm_seconds": round(lm.compute_seconds, 3),
         "loop_seconds": round(t_decode_loop, 3),
@@ -515,6 +534,8 @@ def main() -> None:
     g.add_argument("--num-step", type=int, default=32)
     g.add_argument("--guidance-scale", type=float, default=2.0)
     g.add_argument("--t-shift", type=float, default=0.1)
+    g.add_argument("--confidence-threshold", type=float, default=0.0,
+                   help="commit every cell above this probability, not just k per step")
     g.add_argument("--denoise", action="store_true", default=True)
     g.add_argument("--postprocess", action="store_true", default=True)
     g.add_argument("--deterministic", action="store_true")

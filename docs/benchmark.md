@@ -554,6 +554,114 @@ backend choice (17 %), and comparable to halving the step count. Any future
 benchmark on this device has to state its thermal state or it is not comparable.
 `thermal_status` never left 1 (LIGHT), so this is ordinary DVFS, not throttling.
 
+### 7.8 The diffusion-LLM speedups, and why one of them does not transfer
+
+The literature on masked diffusion LMs has two headline accelerations, and
+OmniVoice is exactly that class of model, so both were worth trying.
+
+**Confidence-aware parallel decoding** (Fast-dLLM, arXiv:2505.22618) is the
+cheaper one and needs no re-export. Instead of un-masking a fixed `k` cells per
+step, commit *every* cell whose predicted probability clears a threshold; on
+LLaDA and Dream this collapses many steps into one and is most of the reported
+27.6x. Implemented behind `--confidence-threshold` in `scripts/infer_onnx.py`
+and measured on the PC:
+
+| steps | threshold | LM calls | LM time | RTF |
+|---:|---:|---:|---:|---:|
+| 16 | 0.00 (off) | 32 | 8.39 s | 4.97 |
+| 16 | 0.90 | 32 | 7.74 s | 4.59 |
+| 16 | 0.95 | 32 | 7.30 s | 4.35 |
+| 32 | 0.90 | 64 | 13.95 s | 8.18 |
+| 8 | 0.00 (off) | 16 | 3.36 s | 1.89 |
+
+**`LM calls` never drops.** The loop never finishes early, so the small time
+differences are run-to-run noise, not a speedup.
+
+`scripts/speed_probe.py` shows why. Per step, out of 384 masked cells, the number
+whose CFG-mixed probability clears each threshold:
+
+```
+  step  masked  sched k    p>0.5    p>0.7    p>0.9   p>0.95    maxp
+     1     384        3       15        1        1        0   0.900
+     4     374        4       40       13        3        1   0.998
+     8     353        8       46       16        3        3   0.965
+    12     309       20       16        6        2        1   0.963
+    16     145      145       11        2        0        0   0.821
+```
+
+At no point are there more high-confidence cells than the schedule was already
+going to take — by step 8 the schedule takes 8 and only 3 cells exceed p > 0.9.
+This is a property of the data, not of the implementation. A text diffusion LM
+picking among 150k tokens is often overwhelmingly sure of the next word; an RVQ
+audio cell is one of 1025 near-equivalent codes, and our own re-masking judge
+measures the model's NLL at ~2.75 — a perplexity near 15. **A model that is never
+confident cannot be accelerated by trusting its confidence.** The flag stays in
+the script because the measurement is the useful artefact, but it is off by
+default and there is nothing to gain by turning it on.
+
+**Approximate prefix KV cache** is the other half of Fast-dLLM and is untried.
+It is not blocked by the model the way a real KV cache is: §1.1's finding
+forbids caching across the *generated* region, whose tokens change every step,
+but the reference prefix does not change at all. At S = 188 the prefix is 140
+tokens — **74 % of the sequence**, re-encoded 32 times for nothing. Trimming the
+reference measures the size of that prize directly:
+
+| reference frames | reference seconds | S | forward | speedup |
+|---:|---:|---:|---:|---:|
+| 103 (as enrolled) | 4.12 | 188 | 314 ms | 1.00x |
+| 75 | 3.00 | 155 | 274 ms | 1.15x |
+| 50 | 2.00 | 125 | 204 ms | 1.54x |
+| 25 | 1.00 | 92 | 156 ms | 2.01x |
+
+Halving the reference nearly halves the work, which is the cost of re-reading
+the prefix stated in wall-clock. Caching it rather than truncating it would keep
+the voice quality and needs a re-export carrying `past_key_values` I/O on the
+prefix range only. That is the one identified, quantified, un-taken speedup left,
+and it is a day of work on the export, not a flag.
+
+### 7.9 Codebook ablation — which layers of the RVQ actually matter
+
+The UI claims the voice's outline resolves before its detail, which is a claim
+about the residual quantiser and therefore testable. `scripts/codebook_ablation.py`
+randomises one codebook at a time and re-decodes (12 trials, LSD and SNR against
+the intact decode):
+
+| corrupted | LSD dB | SNR dB |
+|---|---:|---:|
+| **codebook 0** | **13.70** | **-1.13** |
+| **codebook 1** | **9.14** | 2.48 |
+| codebook 2 | 3.90 | 9.94 |
+| codebook 3 | 4.40 | 5.18 |
+| codebook 4 | 3.42 | 12.93 |
+| codebook 5 | 3.57 | 13.85 |
+| codebook 6 | 3.13 | 14.56 |
+| codebook 7 | 3.07 | 13.53 |
+
+and keeping only the first k, randomising the rest:
+
+| kept | LSD dB | SNR dB |
+|---|---:|---:|
+| 0 only | 10.82 | -0.99 |
+| 0–1 | 6.84 | 1.87 |
+| 0–3 | 5.30 | 7.65 |
+| 0–5 | 3.95 | 11.17 |
+| 0–6 | 3.07 | 13.88 |
+| 0–7 | 0.00 | 147.85 |
+
+The ordering by damage is `[0, 1, 3, 2, 5, 4, 6, 7]` — **not** monotone in the
+index. So "coarse to fine" is directionally right but overstated: it is not a
+smooth eight-step gradient but a **cliff and a plateau**. Codebooks 0 and 1 carry
+~4.5x the damage of any other, and 2 through 7 are near-interchangeable refinement
+whose individual order barely matters.
+
+The *temporal* half of the claim is on firmer ground and is a property of the
+sampler rather than the codec: `layer_penalty_factor = 5.0` subtracts 5 per
+codebook index from the selection score, so layer 0 is un-masked first by
+construction. On device the ladder shows the resulting staircase directly —
+83 / 56 / 27 / 10 / 3 / 2 / 1 / 0 percent filled at the same step.
+
+---
+
 ---
 
 ## Conclusion — the four questions from the brief
