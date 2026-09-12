@@ -192,22 +192,74 @@ def stage_codec(args) -> bool:
     return ok
 
 
+def stage_dsp(args) -> bool:
+    """The numpy silence/fade ports vs upstream (pydub) — these feed the encoder,
+    so a few hundred samples of drift shifts every codec frame."""
+    print("\n[dsp] silence removal / fade+pad: numpy port vs upstream pydub")
+    from omnivoice.utils.audio import fade_and_pad_audio as up_fade
+    from omnivoice.utils.audio import remove_silence as up_remove
+    from _common import fade_and_pad as my_fade
+    from _common import remove_silence as my_remove
+
+    x, sr = read_wav(args.wav or "sample/reference.wav")
+    ok = True
+    for mid, lead, trail in ((200, 100, 200), (500, 100, 100), (300, 100, 300)):
+        want = up_remove(x[None, :].copy(), sr, mid, lead, trail)[0]
+        got = my_remove(x.copy(), sr, mid, lead, trail)
+        same_len = len(got) == len(want)
+        mad = float(np.abs(got[:min(len(got), len(want))]
+                           - want[:min(len(got), len(want))]).max()) if min(len(got), len(want)) else 0.0
+        good = same_len and mad < 1e-4
+        ok &= good
+        print(f"    {'OK ' if good else 'BAD'} remove_silence(mid={mid},lead={lead},trail={trail}) "
+              f"len {len(got)} vs {len(want)}   max|Δ| {mad:.2e}")
+
+    want = up_fade(x[None, :].copy(), 0.1, 0.1, sr)[0]
+    got = my_fade(x.copy(), sr, 0.1, 0.1)
+    good = len(got) == len(want) and float(np.abs(got - want).max()) < 1e-6
+    ok &= good
+    print(f"    {'OK ' if good else 'BAD'} fade_and_pad  len {len(got)} vs {len(want)}")
+    print(f"    {'PASS' if ok else 'FAIL'}")
+    return ok
+
+
+def stage_e2e(args) -> bool:
+    """Deterministic ONNX pipeline vs the deterministic PyTorch golden."""
+    print("\n[e2e] ONNX audio codes vs PyTorch golden (deterministic)")
+    gold = GOLDEN / "det_codes.npy"
+    onnx = OUT / "onnx" / "cloned_det.codes.npy"
+    if not gold.exists() or not onnx.exists():
+        print(f"    SKIP — need {gold} and {onnx}")
+        print("    run: reference_infer.py clone --deterministic --out out/golden_det")
+        print("         infer_onnx.py generate --deterministic --out out/onnx/cloned_det.wav")
+        return True
+    a, b = np.load(onnx), np.load(gold)
+    T = min(a.shape[1], b.shape[1])
+    agree = float((a[:, :T] == b[:, :T]).mean())
+    per = " ".join(f"{(a[c, :T] == b[c, :T]).mean() * 100:.0f}" for c in range(NUM_CODEBOOKS))
+    print(f"    shapes {a.shape} vs {b.shape}; code agreement {agree * 100:.2f} %  per-cb {per}")
+    ok = agree > 0.90
+    print(f"    {'PASS' if ok else 'FAIL'}")
+    return ok
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--stage", action="append",
-                    choices=["bidir", "lm", "codec", "all"], default=None)
+                    choices=["bidir", "lm", "codec", "dsp", "e2e", "all"], default=None)
     ap.add_argument("--lm", default=None, help="path to omnivoice_lm.onnx")
     ap.add_argument("--wav", default=None)
     ap.add_argument("--threads", type=int, default=0)
     args = ap.parse_args()
     stages = args.stage or ["all"]
     if "all" in stages:
-        stages = ["bidir", "lm", "codec"]
+        stages = ["bidir", "lm", "codec", "dsp", "e2e"]
 
     results = {}
     for s in stages:
-        results[s] = {"bidir": stage_bidir, "lm": stage_lm, "codec": stage_codec}[s](args)
+        results[s] = {"bidir": stage_bidir, "lm": stage_lm, "codec": stage_codec,
+                      "dsp": stage_dsp, "e2e": stage_e2e}[s](args)
 
     print("\n=== summary ===")
     for k, v in results.items():

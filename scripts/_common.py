@@ -141,3 +141,138 @@ class VoicePrompt:
         body = raw[28 + tlen:]
         codes = np.frombuffer(body, dtype="<i2", count=ncb * nframes).reshape(ncb, nframes)
         return cls(codes=codes.copy(), ref_text=text, ref_rms=float(rms), sample_rate=int(sr))
+
+
+# ---------------------------------------------------------------------------
+# Silence handling — numpy port of omnivoice/utils/audio.py, which delegates to
+# pydub (MIT). Reimplemented rather than wrapped because the Android side has no
+# pydub; `validate_onnx.py --stage dsp` asserts this matches pydub sample-exactly.
+#
+# pydub works on int16 samples at 1 ms granularity, so everything below is in
+# milliseconds and on the int16 scale. max_possible_amplitude = 32768.
+# ---------------------------------------------------------------------------
+
+_MAX_AMP = 32768.0
+
+
+def _ms_rms(x_i16: np.ndarray, sr: int, start_ms: int, len_ms: int) -> float:
+    a = int(start_ms * sr / 1000)
+    b = int((start_ms + len_ms) * sr / 1000)
+    seg = x_i16[a:b]
+    if seg.size == 0:
+        return 0.0
+    # audioop.rms truncates to int; match that so thresholds tie-break identically
+    return float(int(np.sqrt(np.mean(seg.astype(np.float64) ** 2))))
+
+
+def detect_silence(x_i16: np.ndarray, sr: int, min_silence_len: int,
+                   silence_thresh_db: float, seek_step: int = 1) -> list[list[int]]:
+    """Port of pydub.silence.detect_silence. Returns [start_ms, end_ms] ranges."""
+    seg_len = int(len(x_i16) * 1000 // sr)
+    if seg_len < min_silence_len:
+        return []
+    thresh = (10.0 ** (silence_thresh_db / 20.0)) * _MAX_AMP
+
+    last_start = seg_len - min_silence_len
+    starts = list(range(0, last_start + 1, seek_step))
+    if last_start % seek_step:
+        starts.append(last_start)
+
+    silent = [i for i in starts if _ms_rms(x_i16, sr, i, min_silence_len) <= thresh]
+    if not silent:
+        return []
+
+    ranges, prev = [], silent[0]
+    cur = prev
+    for i in silent[1:]:
+        contiguous = (i == prev + seek_step)
+        has_gap = i > (prev + min_silence_len)
+        if not contiguous and has_gap:
+            ranges.append([cur, prev + min_silence_len])
+            cur = i
+        prev = i
+    ranges.append([cur, prev + min_silence_len])
+    return ranges
+
+
+def detect_nonsilent(x_i16: np.ndarray, sr: int, min_silence_len: int,
+                     silence_thresh_db: float, seek_step: int = 1) -> list[list[int]]:
+    """Port of pydub.silence.detect_nonsilent."""
+    silent = detect_silence(x_i16, sr, min_silence_len, silence_thresh_db, seek_step)
+    length = int(len(x_i16) * 1000 // sr)
+    if not silent:
+        return [[0, length]]
+    if silent[0][0] == 0 and silent[0][1] == length:
+        return []
+
+    out, prev_end = [], 0
+    if silent[0][0] == 0:
+        prev_end = silent[0][1]
+        silent = silent[1:]
+    for start, end in silent:
+        out.append([prev_end, start])
+        prev_end = end
+    if prev_end < length:
+        out.append([prev_end, length])
+    return out
+
+
+def _detect_leading_silence(x_i16: np.ndarray, sr: int, thresh_db: float = -50.0,
+                            chunk_ms: int = 10) -> int:
+    """Port of pydub.silence.detect_leading_silence (dBFS, not rms)."""
+    length = int(len(x_i16) * 1000 // sr)
+    trim = 0
+    while trim < length:
+        rms = _ms_rms(x_i16, sr, trim, chunk_ms)
+        dbfs = -np.inf if rms <= 0 else 20.0 * np.log10(rms / _MAX_AMP)
+        if dbfs >= thresh_db:
+            break
+        trim += chunk_ms
+    return trim
+
+
+def remove_silence(x: np.ndarray, sr: int, mid_sil: int = 300, lead_sil: int = 100,
+                   trail_sil: int = 300, silence_thresh_db: float = -50.0) -> np.ndarray:
+    """Port of omnivoice.utils.audio.remove_silence (float32 in, float32 out)."""
+    if x.size == 0:
+        return x
+    # upstream numpy_to_audiosegment: *32768 then clip to int16 range
+    xi = (np.asarray(x, np.float32) * 32768.0).clip(-32768, 32767).astype(np.int16)
+
+    def ms(a: int) -> int:
+        return int(a * sr / 1000)
+
+    if mid_sil > 0:
+        # pydub.split_on_silence(keep_silence=mid_sil, seek_step=10) then concatenate
+        nonsilent = detect_nonsilent(xi, sr, mid_sil, silence_thresh_db, seek_step=10)
+        length = int(len(xi) * 1000 // sr)
+        pieces = []
+        for start, end in nonsilent:
+            pieces.append(xi[ms(max(0, start - mid_sil)):ms(min(length, end + mid_sil))])
+        xi = np.concatenate(pieces) if pieces else xi[:0]
+
+    if xi.size:
+        head = max(0, _detect_leading_silence(xi, sr, silence_thresh_db) - lead_sil)
+        xi = xi[ms(head):]
+    if xi.size:
+        rev = xi[::-1].copy()
+        tail = max(0, _detect_leading_silence(rev, sr, silence_thresh_db) - trail_sil)
+        xi = rev[ms(tail):][::-1].copy()
+
+    return (xi.astype(np.float32) / 32768.0)
+
+
+def fade_and_pad(x: np.ndarray, sr: int = SR_24K, pad_s: float = 0.1,
+                 fade_s: float = 0.1) -> np.ndarray:
+    """Port of omnivoice.utils.audio.fade_and_pad_audio."""
+    if x.size == 0:
+        return x
+    out = np.asarray(x, np.float32).copy()
+    k = min(int(fade_s * sr), out.shape[-1] // 2)
+    if k > 0:
+        out[:k] *= np.linspace(0, 1, k, dtype=np.float32)
+        out[-k:] *= np.linspace(1, 0, k, dtype=np.float32)
+    p = int(pad_s * sr)
+    if p > 0:
+        out = np.concatenate([np.zeros(p, np.float32), out, np.zeros(p, np.float32)])
+    return out
