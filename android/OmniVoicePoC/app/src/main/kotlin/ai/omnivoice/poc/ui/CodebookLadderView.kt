@@ -1,5 +1,6 @@
 package ai.omnivoice.poc.ui
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.LinearGradient
@@ -50,18 +51,42 @@ class CodebookLadderView @JvmOverloads constructor(
     )
 
     private val progress = FloatArray(OV.NUM_CODEBOOKS)
+    private val from = FloatArray(OV.NUM_CODEBOOKS)
+    private val target = FloatArray(OV.NUM_CODEBOOKS)
     private val rect = RectF()
+    private var anim: ValueAnimator? = null
 
-    /** @param filled per-codebook fill in 0..1 */
+    /**
+     * @param filled per-codebook fill in 0..1
+     *
+     * The loop reports once per un-masking step, roughly once a second, so the
+     * bars used to stand still and then jump. They are interpolated between two
+     * reported states rather than extrapolated: nothing here shows progress the
+     * model has not already made.
+     */
     fun setProgress(filled: FloatArray) {
-        for (i in 0 until minOf(filled.size, progress.size)) {
-            progress[i] = filled[i].coerceIn(0f, 1f)
+        anim?.cancel()
+        System.arraycopy(progress, 0, from, 0, progress.size)
+        for (i in 0 until minOf(filled.size, target.size)) {
+            target[i] = filled[i].coerceIn(0f, 1f)
         }
-        invalidate()
+        anim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 360L
+            interpolator = Motion.standard
+            addUpdateListener {
+                val t = it.animatedValue as Float
+                for (i in progress.indices) progress[i] = from[i] + (target[i] - from[i]) * t
+                invalidate()
+            }
+            start()
+        }
     }
 
     fun reset() {
+        anim?.cancel()
         progress.fill(0f)
+        from.fill(0f)
+        target.fill(0f)
         invalidate()
     }
 

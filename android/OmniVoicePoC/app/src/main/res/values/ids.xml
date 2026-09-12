@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- View tag keys must be real resource ids; Motion stores per-view animation
+     state on the views it animates. -->
+<resources>
+    <item name="motion_value" type="id" />
+    <item name="motion_anim" type="id" />
+</resources>

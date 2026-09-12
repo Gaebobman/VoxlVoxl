@@ -5,6 +5,11 @@ import ai.omnivoice.poc.core.VoiceProfile
 import ai.omnivoice.poc.core.VoiceStyle
 import ai.omnivoice.poc.ui.CodeStripView
 import ai.omnivoice.poc.ui.CodebookLadderView
+import ai.omnivoice.poc.ui.Motion
+import ai.omnivoice.poc.ui.Motion.animateInt
+import ai.omnivoice.poc.ui.Motion.animateNextLayout
+import ai.omnivoice.poc.ui.Motion.enterScreen
+import ai.omnivoice.poc.ui.Motion.pressableTree
 import ai.omnivoice.poc.ui.WaveformView
 import android.Manifest
 import android.content.ComponentName
@@ -115,6 +120,7 @@ class MainActivity : AppCompatActivity() {
 
         profiles = FileVoiceProfileManager(File(filesDir, "voices"))
         wire()
+        screens.pressableTree()
         buildDevControls()
         refreshVoices()
 
@@ -151,20 +157,31 @@ class MainActivity : AppCompatActivity() {
 
     private fun modelsReady() = File(File(filesDir, "models"), "omnivoice_lm.onnx").isFile
 
-    private fun show(s: Screen) {
+    /**
+     * Swap screens.
+     *
+     * Both screens are never animated at once: each is a full hierarchy with a
+     * blurred ground behind it, and cross-fading two of them costs more than the
+     * transition is worth. The arriving screen fades up from a few dp below on
+     * the way forward and from above on the way back, which is enough to say
+     * which direction you moved.
+     */
+    private fun show(s: Screen, forward: Boolean = true) {
+        val changed = s != current
         if (s != Screen.DEV) previous = current
         current = s
         for ((k, v) in views) v.visibility = if (k == s) View.VISIBLE else View.GONE
+        if (changed) views[s]?.enterScreen(forward)
     }
 
     private fun goBack() {
         when (current) {
-            Screen.DEV -> show(previous)
-            Screen.ENROLL -> { cancelRecording(); show(Screen.LIBRARY) }
-            Screen.VERIFY -> show(Screen.ENROLL)
-            Screen.COMPOSE -> if (profileList.isEmpty()) show(Screen.LIBRARY) else finish()
-            Screen.RESULT -> show(Screen.COMPOSE)
-            Screen.LIBRARY -> if (profileList.isEmpty()) finish() else show(Screen.COMPOSE)
+            Screen.DEV -> show(previous, forward = false)
+            Screen.ENROLL -> { cancelRecording(); show(Screen.LIBRARY, forward = false) }
+            Screen.VERIFY -> show(Screen.ENROLL, forward = false)
+            Screen.COMPOSE -> if (profileList.isEmpty()) show(Screen.LIBRARY, forward = false) else finish()
+            Screen.RESULT -> show(Screen.COMPOSE, forward = false)
+            Screen.LIBRARY -> if (profileList.isEmpty()) finish() else show(Screen.COMPOSE, forward = false)
             Screen.GENERATING -> toast("생성 중입니다 — 취소를 누르세요")
             else -> finish()
         }
@@ -213,6 +230,24 @@ class MainActivity : AppCompatActivity() {
         }
         id<Button>(R.id.resultSave).setOnClickListener { saveWav() }
         id<Button>(R.id.resultShare).setOnClickListener { shareWav() }
+
+        // Mid-typing, the voice chip and the batch note are not being read; the
+        // room they take is. Collapse them while the field has focus so the
+        // input keeps its size instead of fighting the keyboard for it.
+        id<EditText>(R.id.targetText).setOnFocusChangeListener { _, focused ->
+            id<ViewGroup>(R.id.composeScrollBody).animateNextLayout()
+            id<View>(R.id.composeVoice).visibility = if (focused) View.GONE else View.VISIBLE
+            id<View>(R.id.composeBatchHint).visibility = if (focused) View.GONE else View.VISIBLE
+            if (focused) {
+                id<androidx.core.widget.NestedScrollView>(R.id.composeScroll)
+                    .post { id<View>(R.id.targetText).let { v -> v.parent.requestChildFocus(v, v) } }
+            }
+        }
+        // Tapping anywhere outside gives the field back its chrome.
+        id<View>(R.id.screenCompose).setOnClickListener {
+            id<EditText>(R.id.targetText).clearFocus()
+            hideKeyboard()
+        }
 
         id<EditText>(R.id.targetText).addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) = updateEstimate()
@@ -263,6 +298,7 @@ class MainActivity : AppCompatActivity() {
     // ── voices ───────────────────────────────────────────────────────────
 
     private fun refreshVoices() {
+        id<ViewGroup>(R.id.voiceList).animateNextLayout()
         profileList = profiles.list()
         if (selected == null || profileList.none { it.id == selected!!.id }) {
             selected = profileList.firstOrNull()
@@ -282,6 +318,7 @@ class MainActivity : AppCompatActivity() {
             })
         }
         for (p in profileList) list.addView(voiceCard(p, list))
+        list.pressableTree()
         updateComposeVoice()
     }
 
@@ -516,6 +553,8 @@ class MainActivity : AppCompatActivity() {
             style = VoiceStyle(language = det.code ?: "None"),
             steps = steps, threads = threads,
         )
+        id<EditText>(R.id.targetText).clearFocus()
+        hideKeyboard()
         show(Screen.GENERATING)
     }
 
@@ -530,6 +569,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderQueue() {
         val box = id<LinearLayout>(R.id.queueList)
+        box.animateNextLayout()
         box.removeAllViews()
         val dp = resources.displayMetrics.density
         queue.forEachIndexed { i, t ->
@@ -593,7 +633,7 @@ class MainActivity : AppCompatActivity() {
     private fun render(s: SynthesisService.Status) {
         when (s) {
             is SynthesisService.Status.Loading -> {
-                id<TextView>(R.id.genEta).text = "0"
+                id<TextView>(R.id.genEta).animateInt(0, duration = 0L)
                 id<TextView>(R.id.genEtaUnit).text = "%  모델 여는 중"
             }
             is SynthesisService.Status.Running -> {
@@ -601,7 +641,7 @@ class MainActivity : AppCompatActivity() {
                 // Percent rather than a countdown: the seconds estimate is honest
                 // but it moves around as the device warms, and a number that
                 // jumps back up reads as the app being wrong.
-                id<TextView>(R.id.genEta).text = "${(p.fraction * 100).toInt()}"
+                id<TextView>(R.id.genEta).animateInt((p.fraction * 100).toInt())
                 id<TextView>(R.id.genEtaUnit).text = "%"
                 id<TextView>(R.id.genStep).text = "${p.step} / ${p.totalSteps} 단계"
                 id<TextView>(R.id.genCells).text =
@@ -625,11 +665,11 @@ class MainActivity : AppCompatActivity() {
                     id<EditText>(R.id.targetText).setText(next)
                 }
             }
-            is SynthesisService.Status.Cancelled -> show(Screen.COMPOSE)
+            is SynthesisService.Status.Cancelled -> show(Screen.COMPOSE, forward = false)
             is SynthesisService.Status.Failed -> {
                 toast(s.error.message ?: "생성 실패")
                 Log.e(TAG, "generation failed", s.error)
-                show(Screen.COMPOSE)
+                show(Screen.COMPOSE, forward = false)
             }
             else -> Unit
         }
@@ -859,6 +899,11 @@ class MainActivity : AppCompatActivity() {
     private fun segParams() = LinearLayout.LayoutParams(0,
         ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
         marginEnd = (7 * resources.displayMetrics.density).toInt()
+    }
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+        imm?.hideSoftInputFromWindow(window.decorView.windowToken, 0)
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
