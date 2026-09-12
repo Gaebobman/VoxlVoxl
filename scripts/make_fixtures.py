@@ -113,7 +113,7 @@ def main() -> None:
                 sched = unmask_schedule(num_step, t_shift, total)
                 sched_cases.append({
                     "num_step": num_step, "t_shift": t_shift, "total": total,
-                    "timesteps": [round(v, 9) for v in time_steps(num_step, t_shift).tolist()],
+                    "timesteps": time_steps(num_step, t_shift).tolist(),   # full float64
                     "schedule": sched, "sum": int(sum(sched)),
                 })
     (dest / "schedule.json").write_text(json.dumps({"cases": sched_cases}, indent=1))

@@ -32,3 +32,7 @@ android/**/local.properties
 # --- misc ---
 .DS_Store
 scratch/
+
+# gradle wrapper jar is intentionally tracked; everything else gradle generates is not
+android/OmniVoicePoC/.kotlin/
+android/OmniVoicePoC/build/
