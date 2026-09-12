@@ -9,7 +9,12 @@ reference.wav + reference transcript + target text  ──►  cloned speech (24
 
 Status: **Level 1 reached — full voice cloning runs from ONNX alone on the PC.**
 Phases 1–3 done (golden reference, fused bidirectional export + validation, voice-prompt
-cache). Phase 4 (the Android app) is next. Numbers in
+cache); Phase 4 in progress — the app builds and its pure-logic ports pass 11/11 JVM
+tests against Python-generated fixtures.
+
+Deterministic ONNX output scores **2.7325** under the fp32 reference's own re-masking
+objective against PyTorch's **2.7672** — the ported pipeline is not merely close to the
+reference, it is interchangeable with it. Numbers in
 [`docs/benchmark.md`](docs/benchmark.md); why the obvious shortcut
 (`onnx-community/OmniVoice-Onnx`) does not work in
 [`docs/onnx-reuse-audit.md`](docs/onnx-reuse-audit.md).

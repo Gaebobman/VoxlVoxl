@@ -52,8 +52,10 @@ class Recorder:
         self.model = model
         self.prompts: list[dict] = []
         self.steps: list[dict] = []
+        self.final_codes = None
         self._orig_prepare = model._prepare_inference_inputs
         self._orig_forward = model.forward
+        self._orig_decode = model._decode_and_post_process
 
     def __enter__(self):
         m = self.model
@@ -75,13 +77,22 @@ class Recorder:
             })
             return out
 
+        def decode(tokens, *a, **kw):
+            # tokens is the FINAL (C, T) code tensor; the last recorded forward
+            # still has masked cells because it happens before the last update
+            t = tokens[0] if isinstance(tokens, list) else tokens
+            self.final_codes = t.detach().cpu().numpy().astype(np.int64)
+            return self._orig_decode(tokens, *a, **kw)
+
         m._prepare_inference_inputs = prepare
         m.forward = forward
+        m._decode_and_post_process = decode
         return self
 
     def __exit__(self, *exc):
         self.model._prepare_inference_inputs = self._orig_prepare
         self.model.forward = self._orig_forward
+        self.model._decode_and_post_process = self._orig_decode
         return False
 
 
@@ -164,6 +175,14 @@ def cmd_clone(args) -> None:
         ref_codes=codes.astype(np.int32),
     )
     np.save(outdir / "waveform.npy", audio.astype(np.float32))
+    # the final audio codes (8, T_gen). Must come from _decode_and_post_process:
+    # the last recorded forward runs BEFORE the final un-masking update, so its
+    # input_ids still contain MASK (1024) cells.
+    if rec.final_codes is None:
+        raise RuntimeError("final codes were not captured")
+    if int((rec.final_codes == 1024).sum()):
+        raise RuntimeError("final codes still contain MASK cells")
+    np.save(outdir / "codes.npy", rec.final_codes)
     keep = sorted({0, 1, len(rec.steps) // 2, len(rec.steps) - 1})
     np.savez_compressed(
         outdir / "steps.npz",

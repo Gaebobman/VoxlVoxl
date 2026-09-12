@@ -110,7 +110,28 @@ only time the 654 MB of encoder graphs is needed.
 
 ---
 
-## Phase 4 — Minimal Android app
+## Phase 4 — Minimal Android app  🟡 **IN PROGRESS**
+
+Toolchain installed without root (Temurin 17, Android cmdline-tools, SDK 36,
+Gradle 8.11.1). `./gradlew :app:assembleDebug` produces a 25.9 MB arm64-v8a APK
+carrying `libonnxruntime.so` + `libonnxruntime4j_jni.so` and **no `INTERNET`
+permission**.
+
+Ported and green against `android/fixtures/` (11/11 JVM tests, no device needed):
+
+| component | fixture cases |
+|---|---:|
+| `QwenBpeTokenizer` | 25 + the assembled-prompt case |
+| `DurationEstimator` | 180 |
+| `TextUtils` | 54 |
+| `UnmaskSchedule` | 27 |
+| `VoicePrompt` | reads the Python-written `.bin` |
+| `WavIo` | round-trip + resample |
+
+Still to write: `SilenceUtils`, `OnnxModelRunner`, `OmniVoiceEngine`, `AudioOutput`,
+and the UI.
+
+
 
 `android/OmniVoicePoC/`, Kotlin, ARM64-only, `minSdk 31`, `targetSdk 36`.
 
