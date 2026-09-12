@@ -211,44 +211,210 @@ external-data loader, not operator coverage.
 
 ---
 
-## 7. Galaxy S26+ *(pending — Phase 5)*
+## 7. On device — Galaxy S26 Ultra ✅
 
-| Backend | Precision | num_step | Audio | Load | Latency | RTF | Peak RAM |
-|---|---|---:|---:|---:|---:|---:|---:|
-| CPU | int4 | 16 | | | | | |
-| CPU | int4 | 32 | | | | | |
-| CPU | int4 | 8 | | | | | |
-| XNNPACK | int4 | 16 | | | | | |
-| NNAPI | int4 | 16 | | | | | |
+**The target device is not the one the brief assumed.** It is a Galaxy S26
+**Ultra** (SM-S948N), and its SoC is **Qualcomm SM8850 — Snapdragon 8 Elite
+Gen 5**, not an Exynos 2600:
 
-### NNAPI partitioning *(pending)*
+```
+ro.product.model       SM-S948N          ro.soc.manufacturer  QTI
+ro.build.version.release 16              ro.soc.model         SM8850
+ro.product.cpu.abi     arm64-v8a         ro.board.platform    canoe
+MemTotal               11 389 624 kB     cores                8
+CPU part 0x002 (Oryon) x8: 6 @ 3.63 GHz + 2 @ 4.74 GHz
+```
 
-| metric | value |
+That invalidates the brief's Phase 7 premise (Samsung ENN SDK / Exynos NPU) and
+replaces it with a better one — Qualcomm ships a QNN execution provider for ONNX
+Runtime (`onnxruntime-android-qnn`) targeting the Hexagon NPU. See §7.5.
+
+### Level 2 — sessions load ✅
+
+| | |
 |---|---|
-| nodes on NNAPI / on CPU | |
-| partitions | |
-| top unsupported ops | |
+| backbone `omnivoice_lm.onnx` (422 MB int4 + external data) | **1 023 – 2 110 ms** |
+| `higgs_decoder.onnx` (86 MB fp32) | **153 – 287 ms** |
+| declared tensor signatures | all four inputs correct, `logits [-1,8,-1,1025]` out |
+| Kotlin BPE on device | `<\|denoise\|>`→151669, `<\|text_start\|>`→151674, `<\|text_end\|>`→151675 |
+
+ORT 1.22's ARM64 build accepts `MatMulNBits` (4-bit, block 32) and
+`GatherBlockQuantized` exactly as the desktop 1.22 check predicted.
+
+### Level 3 — voice cloning on device ✅
+
+`sample/reference.wav` + its transcript + "오늘 회의를 시작하겠습니다." →
+a 1.88 s WAV whose duration, RMS (0.0904) and peak (0.5692) sit right between the
+desktop ONNX output (1.86 s / 0.0862 / 0.6696) and the PyTorch golden
+(1.83 s / 0.0949 / 0.5887).
+
+Best configuration, cold device: **RTF 11.30**, peak PSS **591 MB**
+(native 439 MB) — comfortable inside 11.4 GB, and inside a normal Android heap
+because the ORT arenas are native.
+
+### Level 4 — offline ✅ (proven more strongly than airplane mode)
+
+```
+RESULT offline     socket_attempt=SocketException msg=socket failed: EPERM (Operation not permitted)
+RESULT permissions ai.omnivoice.poc.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+```
+
+The app tried to open a TCP socket to 1.1.1.1:53 **while the device was fully
+connected to Wi-Fi**, and the kernel refused: the manifest declares no `INTERNET`
+permission, and the only entry in the permission list is one the build system
+injects. Airplane mode would show "the radios were off during this run"; this
+shows "this process cannot reach the network, ever".
+
+### Level 5 — backend, threads, steps ✅
+
+All at S = 188, 48 generated frames, guidance 2.0.
+
+**Threads** (CPU EP, 16 steps):
+
+| threads | LM time | RTF |
+|---:|---:|---:|
+| 1 | 69.3 s | 38.19 |
+| 2 | 39.4 s | 22.19 |
+| 4 | 23.6 s | 13.95 |
+| **6** | **18.9 s** | **11.56** |
+| 8 | 29.5 s | 17.31 |
+
+8 threads is *worse* than 6. The SoC is 6 + 2, so thread 7 and 8 land on the two
+prime cores and the whole step then waits on scheduler migration and thermal
+budget sharing. **6 is the setting.**
+
+**Execution providers** (6 threads, 16 steps):
+
+| backend | LM time | RTF | vs CPU |
+|---|---:|---:|---:|
+| **CPU** | 18.2 s | **11.06** | — |
+| XNNPACK | 20.5 s | 12.46 | +13 % slower |
+| NNAPI | 21.1 s | 12.94 | +17 % slower |
+
+**Steps** (CPU, 6 threads):
+
+| num_step | LM calls | LM time | RTF |
+|---:|---:|---:|---:|
+| 8 | 16 | 7.6 s | **5.40** |
+| 16 | 32 | 18.5 s | **11.30** |
+| 32 | 64 | 40.5 s | **24.64** |
+
+### 7.4 Why NNAPI and XNNPACK lose — the partitioning evidence
+
+ORT's Android AAR does not route its own log to logcat, so the verbose
+partitioning report is invisible on device. `SessionOptions.enableProfiling`
+answers the question better anyway — it records the execution provider of every
+node that actually ran (`scripts/analyze_profile.py`):
+
+| backend | node executions | on the EP | on CPU |
+|---|---:|---:|---:|
+| CPU | 2785 | — | **2785 (100 %)** |
+| XNNPACK | 2785 | **0** | **2785 (100 %)** |
+| NNAPI | 2785 | **0** | **2785 (100 %)** |
+
+**Neither accelerator claimed a single node.** The 13–17 % penalty is pure
+registration and partitioning overhead with zero offload in return. The cause is
+structural, not a misconfiguration: the graph's arithmetic is
+`com.microsoft::MatMulNBits`, a contrib op neither backend implements.
+
+Where the time actually goes (one forward, S = 188, CPU, 6 threads, 685.5 ms):
+
+| op | time | share | count |
+|---|---:|---:|---:|
+| `MatMulNBits` | 583.5 ms | **85.1 %** | 196 |
+| `MatMul` | 25.8 ms | 3.8 % | 30 |
+| `FusedMatMul` | 16.4 ms | 2.4 % | 28 |
+| `SimplifiedLayerNormalization` | 8.1 ms | 1.2 % | 113 |
+| `GatherBlockQuantized` | 8.0 ms | 1.2 % | 2 |
+| everything else (Unsqueeze ×456, Gather ×312, Concat ×227, …) | ~43 ms | 6.3 % | ~2400 |
+
+The dynamic-shape export leaves ~2400 shape-manipulation nodes in the graph and
+they cost 6 % combined. **There is no overhead to reclaim — the model is
+genuinely int4-GEMM bound**, so the only real levers are fewer steps, shorter
+sequences, or a faster int4 kernel.
+
+### 7.5 The remaining acceleration option: QNN, not NNAPI
+
+Because this is a Snapdragon, `com.microsoft.onnxruntime:onnxruntime-android-qnn`
+is applicable — it targets the Hexagon NPU directly instead of going through the
+deprecated NNAPI abstraction. The device carries `libSnpeHtpV81Stub.so` and
+`libnspextensiongenericqnnservice.so`, so the runtime is present.
+
+It is **not** a drop-in: QNN's HTP backend wants static shapes and its own
+quantization (QDQ int8/int16, not `MatMulNBits`), so it needs a separate export
+with fixed `S` and a QDQ quantization pass. That is the single highest-value
+remaining experiment and it did not exist as an option under the Exynos premise.
+
+### 7.6 Thermal — sustained throughput is about half of cold
+
+Five consecutive generations in one process (16 steps, 6 threads), device on USB
+power:
+
+| run | total | RTF | thermal status |
+|---:|---:|---:|---|
+| 1 | 50.0 s | 26.59 | 1 (LIGHT) |
+| 2 | 44.5 s | 23.67 | 1 |
+| 3 | 36.4 s | 19.34 | 1 |
+| 4 | 40.9 s | 21.75 | 1 |
+| 5 | 44.3 s | 23.57 | 1 |
+
+Battery temperature rose 32.4 °C → 39.0 °C over the session.
+
+The confound worth naming: those runs were back-to-back *and* the phone was
+charging over USB. So a controlled check — one isolated run, identical settings,
+on a warm device:
+
+| device state | RTF |
+|---|---:|
+| cold | **11.30** |
+| warm (same isolated test) | **20.89** |
+
+**Sustained performance is roughly half the cold-start number, and thermal state
+dominates every other variable measured here** — it is a larger effect than
+backend choice (17 %), and comparable to halving the step count. Any future
+benchmark on this device has to state its thermal state or it is not comparable.
+`thermal_status` never left 1 (LIGHT), so this is ordinary DVFS, not throttling.
 
 ---
 
 ## Conclusion — the four questions from the brief
 
-1. **Did OmniVoice inference actually run on the Galaxy S26+?**
-   *Pending.* It runs end to end from ONNX alone on the PC (Level 1 complete),
-   with a graph whose only device dependency is ONNX Runtime.
-2. **Is it fully offline?**
-   *Pending on device.* By construction there is no network path: 422 MB
-   backbone + 86 MB vocoder + 11 MB tokenizer, all local; the offline build
-   variant drops the `INTERNET` permission so a stray call crashes rather than
-   silently succeeding.
-3. **Which backend is fastest?** *Pending.* CPU is the baseline; NNAPI is
-   expected to lose (deprecated in Android 15, and `MatMulNBits` /
-   `GatherBlockQuantized` / `SimplifiedLayerNormalization` are contrib ops it
-   cannot execute).
-4. **Is it fast enough for real use?**
-   *Provisionally no, for interactive use.* Desktop measurement is RTF 4.12 at
-   the recommended 16 steps with 16 threads, RTF 5.44 with 4; the phone will be
-   slower, not faster. The levers that exist have been measured: steps 32→16
-   halves it at a quality cost smaller than upstream's own sampling noise,
-   steps→8 costs real quality, and dropping CFG is not a lever at all because it
-   produces silence.
+**1. Did OmniVoice inference actually run on the Galaxy S26?**
+**Yes.** Reference WAV + typed transcript + target text → a 1.88 s cloned WAV,
+entirely on a Galaxy S26 Ultra (SM-S948N, Android 16), through ONNX Runtime with
+no Python anywhere. Levels 2, 3, 4 and 5 are all reached. Note the device is an
+**Ultra with Snapdragon 8 Elite Gen 5 (SM8850)**, not the Exynos 2600 the brief
+assumed.
+
+**2. Is it fully offline?**
+**Yes, and enforced rather than asserted.** The APK declares no `INTERNET`
+permission; an explicit socket attempt returns `EPERM` while the device is on
+Wi-Fi. All 520 MB of model plus the 11 MB tokenizer are local, and nothing is
+fetched at any point.
+
+**3. Which backend is fastest?**
+**Plain CPU.** RTF 11.06 against XNNPACK 12.46 and NNAPI 12.94, and the profiler
+shows why: both accelerators claimed **0 of 2785 nodes**. 85 % of the time is
+`com.microsoft::MatMulNBits`, which neither implements. The untried option is
+**QNN / Hexagon**, which this Snapdragon supports and an Exynos would not — but
+it needs a separate static-shape QDQ export, so it is the next experiment, not a
+result.
+
+**4. Is it fast enough for real use?**
+**For asynchronous use, yes. For interactive use, no.**
+
+| setting | cold RTF | 5 s sentence |
+|---|---:|---:|
+| 8 steps | 5.4 | ~27 s |
+| 16 steps (recommended) | 11.3 | ~57 s |
+| 32 steps (upstream default) | 24.6 | ~123 s |
+
+and sustained/warm operation roughly doubles all of those. That is usable for
+"type a message, generate it, send it" and unusable for anything conversational.
+
+The ceiling is structural, not an implementation gap. OmniVoice's attention is
+bidirectional, so no KV cache is possible and every step re-reads the whole
+sequence; the graph is 85 % int4 GEMM with no overhead left to reclaim; and the
+two levers that looked most promising before measurement both failed — dropping
+CFG produces silence, and pushing int4 into the audio head destroys quality.
+What remains is QNN/Hexagon offload, or a faster ARM int4 kernel than MLAS's.
