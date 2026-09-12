@@ -40,6 +40,13 @@ class OnnxModelRunner(
      * provider for every node that actually ran.
      */
     private val profileDir: File? = null,
+    /**
+     * Relative to [modelDir]. A variant in a subdirectory works because ORT
+     * resolves `.onnx.data` relative to the model file, not the process CWD —
+     * which is also why two variants cannot share one directory: both record
+     * the same external-data filename.
+     */
+    private val lmFileName: String = "omnivoice_lm.onnx",
 ) : AutoCloseable {
 
     companion object {
@@ -111,10 +118,11 @@ class OnnxModelRunner(
         val t0 = System.nanoTime()
         // ORT resolves .onnx.data relative to the model file, so both must sit
         // in the same directory — the reason models live in filesDir, not assets.
-        val s = open("omnivoice_lm.onnx")
+        val s = open(lmFileName)
         lmLoadMillis = (System.nanoTime() - t0) / 1_000_000
-        Log.i(TAG, "backbone loaded in ${lmLoadMillis}ms (backend=$backend, threads=$threads)")
-        describe("omnivoice_lm", s)
+        Log.i(TAG, "backbone loaded in ${lmLoadMillis}ms " +
+            "(file=$lmFileName, backend=$backend, threads=$threads)")
+        describe(lmFileName, s)
         s
     }
 

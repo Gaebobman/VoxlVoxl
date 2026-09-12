@@ -126,8 +126,9 @@ class DeviceBenchmark {
     fun t05_partitioning() {
         val backend = Backend.valueOf(arg("backend", "NNAPI"))
         val profDir = File(outDir, "profile").apply { mkdirs() }
+        val lmFile = arg("model", "omnivoice_lm.onnx")
         OnnxModelRunner(modelDir, backend, arg("threads", "6").toInt(),
-                        profileDir = profDir).use { r ->
+                        profileDir = profDir, lmFileName = lmFile).use { r ->
             val prompt = VoicePrompt.load(File(modelDir, "voice_prompt.bin"))
             val s = 188
             val ids = Array(OV.NUM_CODEBOOKS) { LongArray(s) }
@@ -137,7 +138,7 @@ class DeviceBenchmark {
             }
             r.forward(ids, BooleanArray(s) { it >= 37 })
             val path = r.endProfiling()
-            bench("profile", "backend=$backend file=$path")
+            bench("profile", "backend=$backend model=$lmFile file=$path")
         }
     }
 
@@ -187,8 +188,10 @@ class DeviceBenchmark {
         Runtime.getRuntime().gc()
         val before = Debug.MemoryInfo().also { Debug.getMemoryInfo(it) }
 
+        val lmFile = arg("model", "omnivoice_lm.onnx")
         OmniVoiceEngine(modelDir, backend, threads,
-                        verbose = arg("verbose", "false").toBoolean()).use { engine ->
+                        verbose = arg("verbose", "false").toBoolean(),
+                        lmFileName = lmFile).use { engine ->
             engine.preload()
             val r = engine.generate(
                 text = text, prompt = prompt, language = "ko", cfg = cfg,
@@ -198,7 +201,9 @@ class DeviceBenchmark {
             }
 
             val after = Debug.MemoryInfo().also { Debug.getMemoryInfo(it) }
-            val name = "gen_${backend}_s${steps}_t${threads}.wav"
+            val tag = lmFile.substringBefore('/').ifEmpty { "dyn" }
+                .let { if (it.endsWith(".onnx")) "dyn" else it }
+            val name = "gen_${tag}_${backend}_s${steps}_t${threads}.wav"
             WavIo.write(File(outDir, name), r.waveform, r.sampleRate)
             // raw codes so the PC side can score this run with the same
             // re-masking judge used on the desktop outputs

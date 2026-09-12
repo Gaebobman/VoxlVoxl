@@ -299,25 +299,70 @@ budget sharing. **6 is the setting.**
 | 16 | 32 | 18.5 s | **11.30** |
 | 32 | 64 | 40.5 s | **24.64** |
 
-### 7.4 Why NNAPI and XNNPACK lose — the partitioning evidence
+### 7.4 Why hardware acceleration does not engage — the full chain
 
 ORT's Android AAR does not route its own log to logcat, so the verbose
 partitioning report is invisible on device. `SessionOptions.enableProfiling`
 answers the question better anyway — it records the execution provider of every
-node that actually ran (`scripts/analyze_profile.py`):
+node that actually ran (`scripts/analyze_profile.py`). Four experiments, each
+isolating one suspect.
 
-| backend | node executions | on the EP | on CPU |
+**(a) The shipping model — int4, dynamic shapes**
+
+| backend | node executions | claimed by the EP | on CPU |
 |---|---:|---:|---:|
-| CPU | 2785 | — | **2785 (100 %)** |
-| XNNPACK | 2785 | **0** | **2785 (100 %)** |
-| NNAPI | 2785 | **0** | **2785 (100 %)** |
+| CPU | 2785 | — | 2785 (100 %) |
+| XNNPACK | 2785 | **0** | 2785 (100 %) |
+| NNAPI | 2785 | **0** | 2785 (100 %) |
 
-**Neither accelerator claimed a single node.** The 13–17 % penalty is pure
-registration and partitioning overhead with zero offload in return. The cause is
-structural, not a misconfiguration: the graph's arithmetic is
-`com.microsoft::MatMulNBits`, a contrib op neither backend implements.
+**(b) Is it the int4 contrib op?** Same test with the **fp32** graph — plain
+`MatMul`, no `MatMulNBits` anywhere:
 
-Where the time actually goes (one forward, S = 188, CPU, 6 threads, 685.5 ms):
+| backend | claimed | on CPU |
+|---|---:|---:|
+| XNNPACK | **0** | 2785 (100 %) |
+| NNAPI | **0** | 2785 (100 %) |
+
+**No.** Removing the contrib op changes nothing. The quantization format was not
+the blocker.
+
+**(c) Is it the dynamic shapes?** Same int4 graph with `batch` pinned to 1 and
+`seq` pinned to 188 (`onnxruntime.tools.make_dynamic_shape_fixed`):
+
+| backend | total nodes | claimed by the EP | on CPU | EP time | CPU time |
+|---|---:|---:|---:|---:|---:|
+| CPU | 1285 | — | 1285 | — | 766 ms |
+| XNNPACK | 1286 | **28 (2.2 %)** | 1258 | 30 ms | 910 ms |
+| NNAPI | 466 | **142 (30.5 %)** | 324 | **4266 ms** | 760 ms |
+
+**Yes — dynamic shapes were the blocker.** NNAPI goes from 0 nodes to 142 the
+moment the shapes are fixed. NNAPI, like every NPU compiler, builds an operand
+graph with concrete dimensions ahead of time; a symbolic `seq` makes every node
+ineligible, and ORT's NNAPI EP therefore returns an empty capability set.
+
+**And it does not help.** Those 142 NNAPI nodes cost **4266 ms** against
+**766 ms for the entire graph on CPU** — roughly **5.6× slower**. Each partition
+boundary forces a CPU↔NNAPI tensor copy, and 142 nodes interleaved with 324 CPU
+nodes means many boundaries. NNAPI is not merely unable to help here; when it
+does engage it is actively harmful.
+
+Only 30.5 % is reachable at all because the arithmetic is
+`com.microsoft::MatMulNBits` — a Microsoft contrib op for 4-bit weight-only
+quantization that exists nowhere outside ORT's own CPU/CUDA kernels. NNAPI got
+the elementwise, normalisation and shape nodes; it could not touch the GEMMs
+that are 85 % of the work.
+
+**(d) Do static shapes at least help the CPU?** Two rounds, alternating, same
+thermal state:
+
+| graph | nodes | forward (round 1) | forward (round 2) |
+|---|---:|---:|---:|
+| dynamic int4 | 2785 | 890.6 ms | 958.5 ms |
+| static int4 | 1285 | 949.6 ms | 985.0 ms |
+
+**No.** Fixing the shapes constant-folds away 1500 nodes and buys nothing,
+because those nodes were never the cost. Where the time actually goes
+(one forward, S = 188, CPU, 6 threads):
 
 | op | time | share | count |
 |---|---:|---:|---:|
@@ -328,22 +373,42 @@ Where the time actually goes (one forward, S = 188, CPU, 6 threads, 685.5 ms):
 | `GatherBlockQuantized` | 8.0 ms | 1.2 % | 2 |
 | everything else (Unsqueeze ×456, Gather ×312, Concat ×227, …) | ~43 ms | 6.3 % | ~2400 |
 
-The dynamic-shape export leaves ~2400 shape-manipulation nodes in the graph and
-they cost 6 % combined. **There is no overhead to reclaim — the model is
-genuinely int4-GEMM bound**, so the only real levers are fewer steps, shorter
-sequences, or a faster int4 kernel.
+**So: the model is int4-GEMM bound, and no accelerator on this device implements
+int4 GEMM through ORT.** That is the whole story.
 
-### 7.5 The remaining acceleration option: QNN, not NNAPI
+### 7.5 What a working NPU path would actually require
 
-Because this is a Snapdragon, `com.microsoft.onnxruntime:onnxruntime-android-qnn`
-is applicable — it targets the Hexagon NPU directly instead of going through the
-deprecated NNAPI abstraction. The device carries `libSnpeHtpV81Stub.so` and
-`libnspextensiongenericqnnservice.so`, so the runtime is present.
+A static export is not a drop-in, for a reason the pipeline itself forces:
 
-It is **not** a drop-in: QNN's HTP backend wants static shapes and its own
-quantization (QDQ int8/int16, not `MatMulNBits`), so it needs a separate export
-with fixed `S` and a QDQ quantization pass. That is the single highest-value
-remaining experiment and it did not exist as an option under the Exynos premise.
+```
+conditional branch    S = 188   (style + text + reference codes + MASK block)
+unconditional branch  S =  48   (the MASK block alone)
+```
+
+Two different lengths every step, and `S` changes with every utterance (text
+length + reference length + target length). A fixed-shape deployment therefore
+needs **bucketed lengths with padding** — compile for, say, S ∈ {128, 256, 384,
+512} and pad up, with the attention mask masking the padding out. Our graph takes
+an explicit 4-D `attention_mask` input, so that is expressible without
+re-exporting; upstream PyTorch does exactly this, padding the unconditional
+branch up to `max_c_len`.
+
+For QNN specifically (`com.microsoft.onnxruntime:onnxruntime-android-qnn`, which
+applies because this is a Snapdragon — the device carries
+`libSnpeHtpV81Stub.so` and `libnspextensiongenericqnnservice.so`):
+
+| requirement | why | status |
+|---|---|---|
+| static shapes | HTP compiles ahead of time | doable — §7.4(c) proves the mechanics |
+| **QDQ int8/int16, not weight-only int4** | HTP has no int4 GEMM; it wants quantized *activations* too, which needs calibration data | **not done — the real work** |
+| context binary caching | HTP graph compilation takes seconds; recompiling per launch would dwarf inference | not done |
+| bucketed S with padding | see above | designed, not built |
+| 422 MB of weights vs HTP tightly-coupled memory | large models stream weights; this is what Qualcomm's Genie/QAIRT stack exists to manage | unknown |
+
+That is a real project, not a flag. It is the single highest-value remaining
+experiment, and it only exists because the device turned out to be a Snapdragon —
+an Exynos 2600 would have offered NNAPI (deprecated) or Samsung's ENN SDK, for
+which ONNX Runtime has no execution provider at all.
 
 ### 7.6 Thermal — sustained throughput is about half of cold
 
@@ -393,12 +458,14 @@ Wi-Fi. All 520 MB of model plus the 11 MB tokenizer are local, and nothing is
 fetched at any point.
 
 **3. Which backend is fastest?**
-**Plain CPU.** RTF 11.06 against XNNPACK 12.46 and NNAPI 12.94, and the profiler
-shows why: both accelerators claimed **0 of 2785 nodes**. 85 % of the time is
-`com.microsoft::MatMulNBits`, which neither implements. The untried option is
-**QNN / Hexagon**, which this Snapdragon supports and an Exynos would not — but
-it needs a separate static-shape QDQ export, so it is the next experiment, not a
-result.
+**Plain CPU**, RTF 11.06 against XNNPACK 12.46 and NNAPI 12.94 — and §7.4 traces
+exactly why, with four experiments rather than an assertion. Dynamic shapes make
+both accelerators claim **0 of 2785 nodes** at any precision; pinning the shapes
+gets NNAPI to 142 nodes, which then run **5.6× slower** than the whole graph does
+on CPU; and the 85 % of the work that is `MatMulNBits` is unreachable for any of
+them. The untried option is **QNN / Hexagon**, which this Snapdragon supports and
+an Exynos would not — but it needs static bucketed shapes, a QDQ int8 requantize
+with calibration, and context-binary caching, so it is a project, not a flag.
 
 **4. Is it fast enough for real use?**
 **For asynchronous use, yes. For interactive use, no.**

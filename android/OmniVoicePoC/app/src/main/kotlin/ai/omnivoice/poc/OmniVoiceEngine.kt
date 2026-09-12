@@ -15,13 +15,15 @@ class OmniVoiceEngine(
     backend: Backend = Backend.CPU,
     threads: Int = 0,
     verbose: Boolean = false,
+    lmFileName: String = "omnivoice_lm.onnx",
 ) : AutoCloseable {
 
     companion object {
         const val TAG = "OmniVoice.Engine"
     }
 
-    private val runner = OnnxModelRunner(modelDir, backend, threads, verbose)
+    private val runner = OnnxModelRunner(modelDir, backend, threads, verbose,
+        lmFileName = lmFileName)
     private val tokenizer: QwenBpeTokenizer by lazy {
         val f = File(modelDir, "tokenizer.json")
         if (!f.isFile) throw OmniVoiceException(
