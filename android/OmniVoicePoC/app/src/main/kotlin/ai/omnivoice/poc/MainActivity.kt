@@ -205,6 +205,7 @@ class MainActivity : AppCompatActivity() {
         id<Button>(R.id.generate).setOnClickListener { startGeneration() }
         id<Button>(R.id.genCancel).setOnClickListener { service?.cancel() }
         id<ImageButton>(R.id.queueAdd).setOnClickListener { enqueue() }
+        id<EditText>(R.id.queueInput).setOnEditorActionListener { _, _, _ -> enqueue(); true }
 
         id<ImageButton>(R.id.resultPlay).setOnClickListener { togglePlay(R.id.resultPlay) }
         id<ImageButton>(R.id.resultReplay).setOnClickListener {
@@ -343,7 +344,7 @@ class MainActivity : AppCompatActivity() {
         id<WaveformView>(R.id.enrollMeter).clear()
         id<TextView>(R.id.enrollSeconds).text = ""
         setElapsed(0f)
-        id<Button>(R.id.enrollRecord).setText(R.string.enroll_start)
+        setEnrollBusy(false)
         show(Screen.ENROLL)
     }
 
@@ -389,15 +390,33 @@ class MainActivity : AppCompatActivity() {
         }
         val refText = id<EditText>(R.id.scriptText).text.toString()
         if (refText.isBlank()) { toast("읽은 문장이 필요합니다"); return }
-        id<TextView>(R.id.enrollStatus).text = "목소리를 변환하는 중…"
+        setEnrollBusy(true)
         service?.enroll(pcm, VoiceRecorder.SAMPLE_RATE, refText,
             reRecordingFor?.displayName
                 ?: SimpleDateFormat("M월 d일 HH:mm", Locale.KOREA).format(System.currentTimeMillis()))
             ?: toast("서비스가 아직 준비되지 않았습니다")
     }
 
+    /**
+     * Encoding takes ~3 s and nothing on screen said so: the record button kept
+     * its full colour and stayed tappable, so a second press started a new
+     * recording on top of the enrollment.
+     */
+    private fun setEnrollBusy(busy: Boolean) {
+        id<Button>(R.id.enrollRecord).apply {
+            isEnabled = !busy
+            setText(if (busy) R.string.enroll_working else R.string.enroll_start)
+        }
+        id<EditText>(R.id.scriptText).isEnabled = !busy
+        id<ImageButton>(R.id.enrollBack).isEnabled = !busy
+        id<TextView>(R.id.enrollStatus).text =
+            if (busy) getString(R.string.enroll_working_note) else ""
+    }
+
     private fun onEnrolled(p: VoiceProfile, echo: FloatArray, millis: Long) {
+        setEnrollBusy(false)
         pendingProfile = p
+        player.onFinished = { setPlayIcon(R.id.verifyPlay, false); stopTicking() }
         player.load(echo, OV.SR_24K)
         id<WaveformView>(R.id.verifyWave).apply {
             tone = WaveformView.Tone.AMBER
@@ -487,7 +506,11 @@ class MainActivity : AppCompatActivity() {
         val svc = service ?: return toast("서비스가 아직 준비되지 않았습니다")
         val det = LanguageDetector.detect(text)
         id<TextView>(R.id.genText).text = text
-        id<CodebookLadderView>(R.id.ladder).reset()
+        id<CodebookLadderView>(R.id.ladder).apply {
+            topLabel = getString(R.string.ladder_top)
+            bottomLabel = getString(R.string.ladder_bottom)
+            reset()
+        }
         svc.synthesize(
             text = text, profile = selected,
             style = VoiceStyle(language = det.code ?: "None"),
@@ -549,13 +572,13 @@ class MainActivity : AppCompatActivity() {
                 launch {
                     svc.enrollStatus.collect { s ->
                         when (s) {
-                            is SynthesisService.EnrollStatus.Encoding ->
-                                id<TextView>(R.id.enrollStatus).text = "목소리를 변환하는 중…"
+                            is SynthesisService.EnrollStatus.Encoding -> setEnrollBusy(true)
                             is SynthesisService.EnrollStatus.Ready -> {
                                 onEnrolled(s.profile, s.echo, s.millis)
                                 svc.clearEnrollment()
                             }
                             is SynthesisService.EnrollStatus.Failed -> {
+                                setEnrollBusy(false)
                                 id<TextView>(R.id.enrollStatus).text = s.error.message ?: "등록 실패"
                                 svc.clearEnrollment()
                             }
@@ -570,13 +593,16 @@ class MainActivity : AppCompatActivity() {
     private fun render(s: SynthesisService.Status) {
         when (s) {
             is SynthesisService.Status.Loading -> {
-                id<TextView>(R.id.genEta).text = "—"
-                id<TextView>(R.id.genEtaUnit).text = "모델 여는 중"
+                id<TextView>(R.id.genEta).text = "0"
+                id<TextView>(R.id.genEtaUnit).text = "%  모델 여는 중"
             }
             is SynthesisService.Status.Running -> {
                 val p = s.progress
-                id<TextView>(R.id.genEta).text = s.etaSeconds?.toInt()?.toString() ?: "—"
-                id<TextView>(R.id.genEtaUnit).text = if (s.etaSeconds != null) "초 남음" else ""
+                // Percent rather than a countdown: the seconds estimate is honest
+                // but it moves around as the device warms, and a number that
+                // jumps back up reads as the app being wrong.
+                id<TextView>(R.id.genEta).text = "${(p.fraction * 100).toInt()}"
+                id<TextView>(R.id.genEtaUnit).text = "%"
                 id<TextView>(R.id.genStep).text = "${p.step} / ${p.totalSteps} 단계"
                 id<TextView>(R.id.genCells).text =
                     "${p.cellsTotal - p.cellsRemaining} / ${p.cellsTotal} 칸"
@@ -584,6 +610,13 @@ class MainActivity : AppCompatActivity() {
             }
             is SynthesisService.Status.Done -> {
                 lastResult = s.result
+                player.onFinished = {
+                    setPlayIcon(R.id.resultPlay, false)
+                    stopTicking()
+                    id<WaveformView>(R.id.resultWave).progress = 0f
+                    id<TextView>(R.id.resultTime).text =
+                        "0:00 / %s".format(clock(s.result.metrics.audioSeconds))
+                }
                 player.load(s.result.samples, s.result.sampleRate)
                 showResult(s.result)
                 if (queue.isNotEmpty()) {
@@ -680,9 +713,8 @@ class MainActivity : AppCompatActivity() {
                 val p = player.progress
                 wave.progress = p
                 clock?.text = "%s / %s".format(clock(p * total.toDouble()), clock(total.toDouble()))
-                if (player.state != AudioOutput.State.PLAYING || p >= 0.999f) {
+                if (player.state != AudioOutput.State.PLAYING) {
                     setPlayIcon(buttonId, false)
-                    if (p >= 0.999f) player.stop()
                     return
                 }
                 ticker.postDelayed(this, 60)

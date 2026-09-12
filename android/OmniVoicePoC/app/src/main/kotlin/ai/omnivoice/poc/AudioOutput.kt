@@ -28,6 +28,9 @@ class AudioOutput {
     var state: State = State.IDLE
         private set
 
+    /** Called on the main thread when the clip reaches its end. */
+    var onFinished: (() -> Unit)? = null
+
     /** 0..1, or 0 when nothing is loaded. */
     val progress: Float
         get() {
@@ -66,6 +69,17 @@ class AudioOutput {
             .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
         t.write(pcm16, 0, pcm16.size)
+        // A static track that runs off the end just sits there; without a marker
+        // nothing knows playback finished, so the UI kept showing a play button
+        // that did nothing.
+        t.setNotificationMarkerPosition(pcm16.size)
+        t.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
+            override fun onMarkerReached(unused: AudioTrack?) {
+                stop()
+                onFinished?.invoke()
+            }
+            override fun onPeriodicNotification(unused: AudioTrack?) = Unit
+        })
         track = t
         state = State.IDLE
         Log.i(TAG, "loaded ${"%.2f".format(durationSeconds)}s @ ${sr}Hz")
@@ -73,7 +87,14 @@ class AudioOutput {
 
     fun play() {
         val t = track ?: return
-        if (state == State.IDLE) t.setPlaybackHeadPosition(0)
+        // MODE_STATIC rewinds with reloadStaticData(), not setPlaybackHeadPosition:
+        // the latter is for streaming tracks and silently fails here, which is why
+        // the second press produced nothing.
+        if (state == State.IDLE) {
+            t.pause()
+            val r = t.reloadStaticData()
+            if (r != AudioTrack.SUCCESS) Log.w(TAG, "reloadStaticData -> $r")
+        }
         t.play()
         state = State.PLAYING
     }
@@ -88,10 +109,9 @@ class AudioOutput {
     fun stop() {
         val t = track ?: return
         t.pause()
-        t.flush()
-        // MODE_STATIC keeps the buffer, so rewinding is enough to make Stop
-        // distinct from Pause without re-uploading the samples
-        runCatching { t.setPlaybackHeadPosition(0) }
+        // Never flush() a static track — it is a streaming-mode call and it
+        // throws away the buffer this class deliberately keeps.
+        runCatching { t.reloadStaticData() }
         state = State.IDLE
     }
 

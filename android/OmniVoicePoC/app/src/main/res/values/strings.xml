@@ -28,6 +28,8 @@
     <string name="enroll_own">내가 쓴 문장으로 녹음하기</string>
     <string name="enroll_start">녹음 시작</string>
     <string name="enroll_stop">녹음 끝내기</string>
+    <string name="enroll_working">변환 중…</string>
+    <string name="enroll_working_note">목소리를 모델이 쓰는 형태로 바꾸는 중입니다. 3초쯤 걸립니다.</string>
     <string name="enroll_min">3초 이상</string>
     <string name="enroll_max">12초</string>
     <string name="enroll_band">권장 구간</string>
@@ -49,7 +51,9 @@
 
     <!-- generating -->
     <string name="gen_tag">만드는 중</string>
-    <string name="gen_ladder">낮은 층부터 차례로 채워집니다</string>
+    <string name="gen_ladder">목소리의 윤곽이 먼저 잡히고, 세부가 나중에 채워집니다</string>
+    <string name="ladder_top">윤곽</string>
+    <string name="ladder_bottom">세부</string>
     <string name="gen_cancel">취소</string>
     <string name="gen_next">기다리는 동안 다음 문장</string>
     <string name="gen_queue_hint">다음에 말할 내용…</string>

@@ -121,66 +121,12 @@
         android:text="@string/gen_cancel"
         android:textSize="14sp" />
 
-    <Space android:layout_width="match_parent" android:layout_height="18dp" />
-
-    <!-- the wait is not dead time -->
-    <TextView
-        style="@style/Voxl.Label"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/gen_next" />
-
-    <Space android:layout_width="match_parent" android:layout_height="8dp" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@drawable/glass_chip"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingEnd="8dp">
-
-        <EditText
-            android:id="@+id/queueInput"
-            android:layout_width="0dp"
-            android:layout_height="52dp"
-            android:layout_weight="1"
-            android:background="@null"
-            android:fontFamily="@font/pretendard"
-            android:hint="@string/gen_queue_hint"
-            android:importantForAutofill="no"
-            android:inputType="textMultiLine"
-            android:maxLines="1"
-            android:textColor="@color/text"
-            android:textColorHint="@color/text_faint"
-            android:textSize="14sp" />
-
-        <ImageButton
-            android:id="@+id/queueAdd"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/gen_next"
-            android:src="@drawable/ic_plus" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/queueList"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:orientation="vertical" />
-
-    <Space
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-
+    <!-- the thermal note is about the run in progress, so it stays with it -->
     <LinearLayout
         android:id="@+id/genThermal"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
         android:background="@drawable/glass_chip"
         android:orientation="horizontal"
         android:padding="14dp"
@@ -200,5 +146,61 @@
             android:layout_marginStart="10dp"
             android:layout_weight="1"
             android:text="@string/gen_thermal" />
+    </LinearLayout>
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:minHeight="18dp" />
+
+    <!-- the wait is not dead time. Bottom-anchored so the keyboard lifts it
+         instead of covering it. -->
+    <TextView
+        style="@style/Voxl.Label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/gen_next" />
+
+    <LinearLayout
+        android:id="@+id/queueList"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/glass_chip"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="8dp">
+
+        <EditText
+            android:id="@+id/queueInput"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:background="@null"
+            android:fontFamily="@font/pretendard"
+            android:hint="@string/gen_queue_hint"
+            android:imeOptions="actionDone"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textColor="@color/text"
+            android:textColorHint="@color/text_faint"
+            android:textSize="14sp" />
+
+        <ImageButton
+            android:id="@+id/queueAdd"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/gen_next"
+            android:src="@drawable/ic_plus" />
     </LinearLayout>
 </LinearLayout>

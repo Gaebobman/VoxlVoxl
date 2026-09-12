@@ -24,9 +24,18 @@ class CodebookLadderView @JvmOverloads constructor(
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x1AFFFFFF }
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0x66F6F1EA
-        textSize = 9f * resources.displayMetrics.scaledDensity
+        color = 0x7AF6F1EA
+        textSize = 9.5f * resources.displayMetrics.scaledDensity
     }
+
+    /**
+     * The rows are codebooks, and an index is meaningless to anyone who has not
+     * read the model card. But the residual quantiser IS coarse-to-fine — layer 0
+     * is the roughest approximation of the voice and each one after it adds
+     * detail — so the axis says that instead of numbering it.
+     */
+    var topLabel: String = ""
+    var bottomLabel: String = ""
 
     /** Warm at layer 0 shading to violet at layer 7, matching the design. */
     private val ends = arrayOf(
@@ -68,14 +77,19 @@ class CodebookLadderView @JvmOverloads constructor(
         val dp = resources.displayMetrics.density
         val barH = 7 * dp
         val gap = 5 * dp
-        val labelW = 16 * dp
+        val labelW = 30 * dp
         val left = labelW
         val right = width.toFloat()
         val radius = barH / 2f
 
         for (i in 0 until OV.NUM_CODEBOOKS) {
             val top = i * (barH + gap)
-            canvas.drawText(i.toString(), 0f, top + barH - 0.5f * dp, label)
+            if (i == 0 && topLabel.isNotEmpty()) {
+                canvas.drawText(topLabel, 0f, top + barH - 0.5f * dp, label)
+            }
+            if (i == OV.NUM_CODEBOOKS - 1 && bottomLabel.isNotEmpty()) {
+                canvas.drawText(bottomLabel, 0f, top + barH - 0.5f * dp, label)
+            }
             rect.set(left, top, right, top + barH)
             canvas.drawRoundRect(rect, radius, radius, track)
 
