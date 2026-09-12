@@ -61,9 +61,16 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
-    // full build: includes com.microsoft contrib ops (MatMulNBits,
-    // GatherBlockQuantized) and the NNAPI + XNNPACK execution providers.
-    // Verified on desktop 1.22.0 that both shipping graphs load — docs/benchmark.md §6
+    // Full build: com.microsoft contrib ops (MatMulNBits, GatherBlockQuantized)
+    // plus the NNAPI and XNNPACK providers. Verified on desktop 1.22.0 that both
+    // shipping graphs load — docs/benchmark.md §6.
+    //
+    // The `-qnn` variant was tried and reverted: its bundled QNN SDK cannot
+    // create a device on this SoC (docs/benchmark.md §7.7). It costs +122 MB of
+    // APK for HTP skels that stop at V79 while this chip is V81. To retry once
+    // ORT ships a newer QNN SDK, swap the line below for
+    // `onnxruntime-android-qnn` and run with `-e backend QNN`; the Backend.QNN
+    // code path is kept for exactly that.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")

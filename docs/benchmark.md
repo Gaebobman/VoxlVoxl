@@ -410,6 +410,92 @@ experiment, and it only exists because the device turned out to be a Snapdragon 
 an Exynos 2600 would have offered NNAPI (deprecated) or Samsung's ENN SDK, for
 which ONNX Runtime has no execution provider at all.
 
+### 7.7 QNN / Hexagon — attempted, and blocked by the runtime, not by us
+
+§7.5 listed what a QNN path needs. All of it was built, and it still does not run
+on this device. The reason is worth recording precisely.
+
+**Building the QDQ model.** Calibration inputs were captured from real decoding
+runs rather than synthesised — 50 samples over 5 texts and 5 decoding steps,
+sequence lengths 48–211 (`scripts/make_calibration.py`). Activation statistics
+change enormously between the first un-masking step and the last, so synthetic
+tensors would mis-calibrate. Then `get_qnn_qdq_config` + `quantize_static`, per
+tensor, no per-channel (`scripts/export_qnn.py`).
+
+Two obstacles on the way, both from the model being 2.45 GB:
+
+- `onnxruntime.tools.make_dynamic_shape_fixed` saves without external data, so it
+  cannot round-trip anything over the 2 GB protobuf limit. Replaced with an
+  external-data-aware `fix_shapes()`.
+- uint16 activations need opset ≥ 21, and ORT's quantizer upgrades by calling
+  `onnx.version_converter`, which serializes the whole model and dies for the
+  same reason. Opset 20 → 21 changed no semantics for the ops in this graph, so
+  the declared version is rewritten directly — and then verified rather than
+  assumed: **max|Δ| 0.0** between the opset-20 and opset-21 graphs.
+
+**Quality of the QDQ models** (fp32 reference re-masking judge, same as §1):
+
+| build | size | meanNLL | top-1 @ 50 % | verdict |
+|---|---:|---:|---:|---|
+| int4 `android_b32` (shipping) | 422 MB | 2.749 | 39.8 % | tied with fp32 |
+| *fp32 stochastic (noise floor)* | — | *3.116* | *34.4 %* | — |
+| **QDQ a16w8** | 780 MB | **3.331** | 30.5 % | degraded but usable |
+| QDQ a8w8 | 617 MB | **8.020** | **1.26 %** | destroyed |
+
+uint8 activations annihilate the model — 1.26 % agreement is essentially random.
+That is the familiar transformer activation-outlier problem: a few channels have
+ranges orders of magnitude wider than the rest, and per-tensor 8-bit scaling
+quantizes everything else to nothing. 16-bit activations recover most of it, at
+780 MB and still outside the fp32 band.
+
+**On the device it never gets to run.** With `libQnnHtp.so` loaded and *no* extra
+provider options:
+
+```
+V  QnnDsp <V> Async property not supported. Skipping setup async threads
+E  qnn_execution_provider.cc:767 GetCapability] QNN SetupBackend failed
+   Failed to create device. Error: QNN_DEVICE_ERROR_INVALID_CONFIG: Invalid config values
+V  session_state.cc:1263] All nodes placed on [CPUExecutionProvider]. Number of nodes: 6493
+```
+
+`QnnDevice_create` fails outright, so `GetCapability` returns nothing and all
+6493 nodes fall to CPU. It is not a misconfiguration — `htp_arch=79`,
+`htp_arch=75`, `soc_model=0`, `device_id=0` and the bare default all produce the
+identical error. (An earlier run that appeared clean was a grep artifact; the
+error is on every run.)
+
+**Root cause — the shipped QNN SDK predates the chip:**
+
+| | |
+|---|---|
+| device SoC | id **660**, machine **CANOE** = SM8850, Hexagon **V81** |
+| HTP skels inside `onnxruntime-android-qnn:1.22.0` | V68, V69, V73, V75, **V79** — nothing newer |
+| QNN skels on the device itself | **none** (`/vendor/lib64/rfsa/adsp/` has no `libQnn*`; only SNPE's `libSnpeHtpV81Stub.so`) |
+| newest ORT Android artifact on Maven Central | **1.22.0, published 2025-05-09** |
+
+So there is no combination of options that can work: the QNN SDK bundled with the
+newest published ORT Android package was cut before Snapdragon 8 Elite Gen 5
+existed, and the device provides no QNN backend of its own to fall back on.
+
+**And the QDQ graph is worse on CPU anyway** — one forward at S = 188:
+
+| graph | forward | composition |
+|---|---:|---|
+| static int4 | 766 ms | 85 % `MatMulNBits` |
+| static QDQ a16w8 | 1209 ms | 68.5 % `MatMul` + 20.0 % `DequantizeLinear` (2830 of them) |
+
+Without an execution provider that consumes QDQ pairs natively, ORT dequantizes
+back to float and the 2830 `DequantizeLinear` nodes are pure overhead.
+
+**Reverted.** `onnxruntime-android-qnn` costs +122 MB of APK (25.9 MB → 148 MB)
+for skels this chip cannot use, so the dependency is back to
+`onnxruntime-android`. The `Backend.QNN` code path, the calibration capture and
+`export_qnn.py` are all kept: retrying is a one-line dependency swap plus
+`-e backend QNN` once ORT ships a QNN SDK that knows V81. Requesting QNN without
+that artifact now fails with a named `MODEL_LOAD_FAILED` rather than silently
+falling back to CPU — which is precisely the trap that made the first NNAPI
+reading look like a success.
+
 ### 7.6 Thermal — sustained throughput is about half of cold
 
 Five consecutive generations in one process (16 steps, 6 threads), device on USB

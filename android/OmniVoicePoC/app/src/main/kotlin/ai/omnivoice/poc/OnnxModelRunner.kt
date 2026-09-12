@@ -11,8 +11,15 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.EnumSet
 
-/** Which execution provider to register. CPU is the correctness baseline. */
-enum class Backend { CPU, XNNPACK, NNAPI }
+/**
+ * Which execution provider to register. CPU is the correctness baseline.
+ *
+ * QNN targets the Hexagon NPU on Snapdragon parts and needs a model built for
+ * it — static shapes and QDQ activations, not the weight-only int4 the CPU path
+ * uses (docs/benchmark.md §7.5). Pointing it at the CPU model is expected to
+ * offload nothing.
+ */
+enum class Backend { CPU, XNNPACK, NNAPI, QNN }
 
 /**
  * Owns the ONNX Runtime environment and the sessions.
@@ -47,6 +54,8 @@ class OnnxModelRunner(
      * the same external-data filename.
      */
     private val lmFileName: String = "omnivoice_lm.onnx",
+    /** Extra provider options, e.g. QNN's `backend_path` / `htp_arch` / `soc_model`. */
+    private val providerOptions: Map<String, String> = emptyMap(),
 ) : AutoCloseable {
 
     companion object {
@@ -86,6 +95,13 @@ class OnnxModelRunner(
             Backend.CPU -> Unit
             Backend.XNNPACK -> so.addXnnpack(mapOf("intra_op_num_threads" to threads.coerceAtLeast(1).toString()))
             Backend.NNAPI -> so.addNnapi(EnumSet.of(NNAPIFlags.USE_FP16))
+            Backend.QNN -> {
+                val opts = HashMap<String, String>()
+                opts["backend_path"] = "libQnnHtp.so"
+                opts.putAll(providerOptions)
+                Log.i(TAG, "QNN provider options: $opts")
+                so.addQnn(opts)
+            }
         }
         return so
     }

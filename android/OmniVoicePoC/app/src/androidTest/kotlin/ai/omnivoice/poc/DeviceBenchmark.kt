@@ -50,6 +50,13 @@ class DeviceBenchmark {
 
     private fun arg(name: String, def: String) = args.getString(name) ?: def
 
+    /** `-e qnn_opts "htp_arch=79,soc_model=0"` */
+    private fun providerOptions(): Map<String, String> =
+        arg("qnn_opts", "").split(",").mapNotNull {
+            val kv = it.split("=", limit = 2)
+            if (kv.size == 2 && kv[0].isNotBlank()) kv[0].trim() to kv[1].trim() else null
+        }.toMap()
+
     private fun bench(tag: String, msg: String) = Log.i(TAG, "RESULT $tag $msg")
 
     @Test
@@ -128,7 +135,8 @@ class DeviceBenchmark {
         val profDir = File(outDir, "profile").apply { mkdirs() }
         val lmFile = arg("model", "omnivoice_lm.onnx")
         OnnxModelRunner(modelDir, backend, arg("threads", "6").toInt(),
-                        profileDir = profDir, lmFileName = lmFile).use { r ->
+                        profileDir = profDir, lmFileName = lmFile,
+                        providerOptions = providerOptions()).use { r ->
             val prompt = VoicePrompt.load(File(modelDir, "voice_prompt.bin"))
             val s = 188
             val ids = Array(OV.NUM_CODEBOOKS) { LongArray(s) }
@@ -148,7 +156,9 @@ class DeviceBenchmark {
         val backend = Backend.valueOf(arg("backend", "CPU"))
         val threads = arg("threads", "0").toInt()
         OnnxModelRunner(modelDir, backend, threads,
-                        verbose = arg("verbose", "false").toBoolean()).use { r ->
+                        verbose = arg("verbose", "false").toBoolean(),
+                        lmFileName = arg("model", "omnivoice_lm.onnx"),
+                        providerOptions = providerOptions()).use { r ->
             r.lm
             r.vocoder
             bench("load", "backend=$backend threads=$threads " +
