@@ -26,6 +26,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -391,7 +392,10 @@ class MainActivity : AppCompatActivity() {
         val field = EditText(this).apply {
             setTextAppearance(R.style.Voxl_Field)
             setText(p.displayName)
-            setSelection(text.length)
+            // Renaming almost always means replacing, not appending — and the
+            // caret otherwise lands at the start, so typing wrote in front of
+            // the old name. Select it all and let the first keystroke take over.
+            setSelectAllOnFocus(true)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_PERSON_NAME
             maxLines = 1
@@ -408,7 +412,14 @@ class MainActivity : AppCompatActivity() {
                 profiles.save(p.copy(displayName = name))
                 if (selected?.id == p.id) selected = p.copy(displayName = name)
                 refreshVoices()
-            }.show()
+            }
+            .show().also {
+                // A dialog whose only control is a text field should open ready
+                // to type in.
+                it.window?.setSoftInputMode(
+                    WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+                field.requestFocus()
+            }
     }
 
     private fun confirmDelete(p: VoiceProfile) {
