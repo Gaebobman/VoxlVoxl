@@ -536,6 +536,7 @@ class DeviceBenchmark {
 
         when (lever) {
             "fusion" -> leverFusion(env, lmFile, threads, reps, p)
+            "kvcache" -> leverKvCache(env, threads, reps, p)
             "sessopts" -> leverSessOpts(env, lmFile, threads, reps, p)
             "models" -> leverModels(env, threads, reps, p)
             "optmodel" -> leverOptModel(env, lmFile, threads, reps, p)
@@ -560,6 +561,133 @@ class DeviceBenchmark {
         val pm = ctx.getSystemService(android.os.PowerManager::class.java)
         pm.currentThermalStatus
     } catch (e: Throwable) { -1 }
+
+    /**
+     * Approximate prefix KV cache against the shipping graph, interleaved.
+     *
+     * The prefix -- style tokens, both transcripts, the reference codes -- is
+     * identical on every step, so the KV graph computes its K/V once (prefill)
+     * and each later conditional forward runs only the T generated positions
+     * against that cache. The desktop could not answer whether this pays on the
+     * shipping configuration: it has no VNNI, so its int8 compute path behaves
+     * nothing like i8mm. Both sessions share one weight blob and are measured
+     * round-robin with the order alternated, because DVFS moves a single forward
+     * by 30 % between adjacent measurements.
+     */
+    private fun leverKvCache(
+        env: ai.onnxruntime.OrtEnvironment, threads: Int, reps: Int, p: Prompt,
+    ) {
+        val layers = 28; val heads = 8; val dim = 128
+        val plain = env.createSession(
+            File(modelDir, arg("model", "omnivoice_lm.onnx")).absolutePath, sessionOptions(threads))
+        val kv = env.createSession(
+            File(modelDir, arg("kvmodel", "omnivoice_lm_kv.onnx")).absolutePath, sessionOptions(threads))
+        val owned = ArrayList<ai.onnxruntime.OnnxTensor>()
+        fun floatTensor(v: FloatArray, shape: LongArray) =
+            ai.onnxruntime.OnnxTensor.createTensor(env,
+                java.nio.ByteBuffer.allocateDirect(v.size * 4)
+                    .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+                    .put(v).also { it.rewind() }, shape).also { owned.add(it) }
+        try {
+            val pLen = p.genStart; val t = p.tGen; val s = p.s
+            val emptyShape = longArrayOf(layers.toLong(), 1, heads.toLong(), 0, dim.toLong())
+            val emptyK = floatTensor(FloatArray(0), emptyShape)
+            val emptyV = floatTensor(FloatArray(0), emptyShape)
+            val (fc, fu) = splitFeeds(env, p)
+            val prefill = fc + mapOf("past_key" to emptyK, "past_value" to emptyV)
+            val kvUncond = fu + mapOf("past_key" to emptyK, "past_value" to emptyV)
+
+            // prefill once to build the cache, keeping only the prefix positions
+            val block = s * dim; val keep = pLen * dim
+            val (prefillLogits, pastK, pastV) = kv.run(prefill).use { out ->
+                fun sliced(name: String): FloatArray {
+                    val fb = (out.get(name).get() as ai.onnxruntime.OnnxTensor).floatBuffer
+                    val full = FloatArray(fb.remaining()); fb.get(full)
+                    val r = FloatArray(layers * heads * keep)
+                    for (lh in 0 until layers * heads) System.arraycopy(full, lh * block, r, lh * keep, keep)
+                    return r
+                }
+                val lfb = (out[0] as ai.onnxruntime.OnnxTensor).floatBuffer
+                val lg = FloatArray(lfb.remaining()); lfb.get(lg)
+                Triple(lg, sliced("present_key"), sliced("present_value"))
+            }
+            val pastShape = longArrayOf(layers.toLong(), 1, heads.toLong(), pLen.toLong(), dim.toLong())
+            val genIds = LongArray(OV.NUM_CODEBOOKS * t)
+            for (c in 0 until OV.NUM_CODEBOOKS) System.arraycopy(p.ids[c], pLen, genIds, c * t, t)
+            val cached = mapOf(
+                "input_ids" to longTensor(env, genIds, longArrayOf(1, OV.NUM_CODEBOOKS.toLong(), t.toLong())),
+                "audio_mask" to boolTensor(env, ByteArray(t) { 1 }, longArrayOf(1, t.toLong())),
+                "attention_mask" to boolTensor(env, ByteArray(t * (pLen + t)) { 1 },
+                    longArrayOf(1, 1, t.toLong(), (pLen + t).toLong())),
+                "position_ids" to longTensor(env, LongArray(t) { (pLen + it).toLong() }, longArrayOf(1, t.toLong())),
+                "past_key" to floatTensor(pastK, pastShape),
+                "past_value" to floatTensor(pastV, pastShape),
+            )
+
+            // correctness before timing: with the cache built from this very state
+            // the cached forward should reproduce the plain graph's gen-region logits
+            val v = OV.AUDIO_VOCAB_SIZE
+            val plainC = runOnce(plain, fc).second
+            val cachedC = runOnce(kv, cached).second
+            fun compare(got: FloatArray, gotRows: Int, gotStart: Int): Pair<Float, Int> {
+                var mx = 0f; var agree = 0
+                for (c in 0 until OV.NUM_CODEBOOKS) for (i in 0 until t) {
+                    val a0 = ((c * s) + pLen + i) * v
+                    val b0 = ((c * gotRows) + gotStart + i) * v
+                    var ba = 0; var bb = 0
+                    var va = Float.NEGATIVE_INFINITY; var vb = Float.NEGATIVE_INFINITY
+                    for (k in 0 until v) {
+                        val x = plainC[a0 + k]; val y = got[b0 + k]
+                        val d = Math.abs(x - y); if (d > mx) mx = d
+                        if (x > va) { va = x; ba = k }
+                        if (y > vb) { vb = y; bb = k }
+                    }
+                    if (ba == bb) agree++
+                }
+                return Pair(mx, agree)
+            }
+            val (dPre, aPre) = compare(prefillLogits, s, pLen)
+            val (dCache, aCache) = compare(cachedC, t, 0)
+            bench("lever_kvcache_correctness", "cells=${OV.NUM_CODEBOOKS * t} " +
+                "prefill_vs_plain max_abs=$dPre argmax=$aPre " +
+                "cached_vs_plain max_abs=$dCache argmax=$aCache")
+
+            runOnce(plain, fu); runOnce(kv, kvUncond); runOnce(kv, prefill)   // warm
+            val pc = ArrayList<Long>(); val pu = ArrayList<Long>()
+            val kc = ArrayList<Long>(); val ku = ArrayList<Long>(); val kp = ArrayList<Long>()
+            for (r in 0 until reps) {
+                fun plainPair() {
+                    pc.add(runOnce(plain, fc).first); pu.add(runOnce(plain, fu).first)
+                }
+                fun kvTrio() {
+                    kc.add(runOnce(kv, cached).first); ku.add(runOnce(kv, kvUncond).first)
+                    kp.add(runOnce(kv, prefill).first)
+                }
+                if (r % 2 == 0) { plainPair(); kvTrio() } else { kvTrio(); plainPair() }
+                bench("lever_kvcache_round", "r=$r plain_c=${pc.last()} plain_u=${pu.last()} " +
+                    "kv_c=${kc.last()} kv_u=${ku.last()} kv_prefill=${kp.last()} thermal=${thermal()}")
+            }
+            fun med(xs: List<Long>) = xs.sorted()[xs.size / 2].toDouble()
+            val steps = arg("steps", "16").toInt()
+            val mpc = med(pc); val mpu = med(pu); val mkc = med(kc); val mku = med(ku); val mkp = med(kp)
+            val plainGen = steps * (mpc + mpu)
+            // step 1's conditional forward IS the prefill; every later one rides the cache
+            val cacheKvU = mkp + (steps - 1) * mkc + steps * mku
+            val cachePlainU = mkp + (steps - 1) * mkc + steps * mpu
+            bench("lever_kvcache", "S=$s P=$pLen T=$t steps=$steps " +
+                "med_ms plain_c=$mpc plain_u=$mpu kv_c=$mkc kv_u=$mku kv_prefill=$mkp " +
+                "gen_ms plain=${"%.0f".format(plainGen)} " +
+                "cache_kv_uncond=${"%.0f".format(cacheKvU)} " +
+                "cache_plain_uncond=${"%.0f".format(cachePlainU)} " +
+                "speedup_kv_uncond=${"%.3f".format(plainGen / cacheKvU)} " +
+                "speedup_plain_uncond=${"%.3f".format(plainGen / cachePlainU)}")
+            (fc.values + fu.values + cached.values).toSet()
+                .filter { it !in owned }.forEach { it.close() }
+        } finally {
+            owned.forEach { it.close() }
+            plain.close(); kv.close()
+        }
+    }
 
     /** Two forwards vs one block-diagonal forward, interleaved to cancel drift. */
     private fun leverFusion(

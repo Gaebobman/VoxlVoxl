@@ -417,7 +417,40 @@ requantize, and context-binary caching: a project, not a flag.
 
 ### 7.1 Approximate prefix KV cache — the largest remaining lever
 
-**State: exported, quality answered, speed not yet measured.**
+**State: exported, exact where checkable, and it pays on device — up to 2.0×.**
+
+Measured 2026-09-13 with `DeviceBenchmark#t12_levers -e lever kvcache`: the
+shipping plain graph and the level-4 KV graph held open in one process, sharing
+one weight blob, round-robin with the order alternated each round, 7 rounds,
+medians, 6 threads, thermal 0.
+
+| case | S | prefix | plain gen | cached gen | speedup |
+|---|---:|---:|---:|---:|---:|
+| short | 188 | 140 (74 %) | 5 888 ms | 3 050 ms | **1.93×** |
+| long | 498 | 198 (40 %) | 29 424 ms | 22 550 ms | **1.30×** |
+
+"cached gen" is `prefill + 15 × cached cond + 16 × uncond`, because step 1's
+conditional forward *is* the prefill. Per forward, short case: plain cond 295 ms
+→ cached cond **99 ms**; prefill 285 ms (≈ one plain cond, as it should be).
+
+The speedup tracks the prefix share, which is the point: the cache removes a
+fixed cost, so it is worth most on short sentences — exactly the utterances that
+were most expensive per second before.
+
+**Correctness at the state the cache was built from is exact**: max |Δ| 0.0,
+argmax 384/384 (short) and 2400/2400 (long), for both the prefill and the cached
+forward against the plain graph. That verifies the plumbing — positions, masks,
+the sliced K/V. The approximation's own error (a cache built at the all-MASK
+state reused as the grid fills) is what the judge measures below.
+
+Running the unconditional branch through the KV session with an empty past costs
+80 vs 73 ms (short) and 641 vs 622 ms (long) — about 3 %. So the cache ships as
+**one graph, one session**: 1.93× instead of 2.00×, without a second prepacked
+copy of the weights in memory.
+
+The desktop could not have answered this. It has AVX2 without VNNI, so its
+int8-compute path behaves nothing like the phone's `i8mm`; on the desktop,
+level 4 even ran slower than level 1 on the long case.
 `models/onnx/int4_kv/omnivoice_lm_kv.onnx` carries `past_key`/`past_value` in and
 `present_key`/`present_value` out (28 layers × 8 heads × 128), opset 20, sharing
 the same 422 MB weight blob. `scripts/kvcache_probe.py` has the harness

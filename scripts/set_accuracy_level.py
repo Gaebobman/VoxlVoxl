@@ -11,12 +11,14 @@ Because this is metadata, the rewrite is seconds and reversible, and quality
 can be judged against the very same weights:
 
   python scripts/set_accuracy_level.py --in models/onnx/int4 --out models/onnx/int4_acc4 --level 4
-  python scripts/validate_onnx.py --stage judge --lm models/onnx/int4_acc4/omnivoice_lm.onnx
+  python scripts/set_accuracy_level.py --in models/onnx/int4_kv --out models/onnx/int4_kv_acc4 \
+      --graph omnivoice_lm_kv.onnx
 """
 from __future__ import annotations
 
 import argparse
 import collections
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -28,6 +30,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import MODELS  # noqa: E402
 
 LM = "omnivoice_lm.onnx"
+
+
+def place(src: Path, dst: Path) -> None:
+    """Hard-link where the filesystem allows it, copy where it does not. The
+    weight blob is identical by construction, so there is no reason to spend
+    420 MB of disk on a second copy of it."""
+    if dst.exists():
+        dst.unlink()
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
 
 
 def levels(model: onnx.ModelProto) -> dict:
@@ -45,10 +59,12 @@ def main() -> None:
     ap.add_argument("--in", dest="src", default=str(MODELS / "onnx" / "int4"))
     ap.add_argument("--out", dest="dst", default=str(MODELS / "onnx" / "int4_acc4"))
     ap.add_argument("--level", type=int, default=4, choices=[0, 1, 2, 3, 4])
+    ap.add_argument("--graph", default=LM, help="graph file name inside --in")
     args = ap.parse_args()
+    graph = args.graph
 
     src, dst = Path(args.src), Path(args.dst)
-    model = onnx.load(str(src / LM), load_external_data=False)
+    model = onnx.load(str(src / graph), load_external_data=False)
     print(f"  in   {src}  {levels(model)}")
 
     touched = 0
@@ -64,20 +80,17 @@ def main() -> None:
         touched += 1
 
     dst.mkdir(parents=True, exist_ok=True)
-    # The weights are untouched, so the external-data blob is copied verbatim
+    # The weights are untouched, so the external-data blob is linked verbatim
     # rather than re-serialised -- and `onnx.save_model` APPENDS to an existing
     # external file, so anything already there has to go first.
     for f in src.iterdir():
-        if f.name == LM:
+        if f.name == graph:
             continue
-        target = dst / f.name
-        if target.exists():
-            target.unlink()
-        shutil.copy2(f, target)
-    (dst / LM).unlink(missing_ok=True)
-    onnx.save(model, str(dst / LM))
+        place(f, dst / f.name)
+    (dst / graph).unlink(missing_ok=True)
+    onnx.save(model, str(dst / graph))
 
-    check = onnx.load(str(dst / LM), load_external_data=False)
+    check = onnx.load(str(dst / graph), load_external_data=False)
     print(f"  out  {dst}  {levels(check)}   ({touched} nodes)")
 
 
