@@ -509,6 +509,23 @@ number to quote per forward, and this table only confirms the port.
 
 Cost: peak PSS **771–794 MB → 892–931 MB**, about +130 MB, for the cached
 prefix K/V and the copy made while slicing it out of the prefill.
+
+**Through the app**, same device, same sentences as §5.1's app measurements:
+
+| sentence | before KV cache | with KV cache | |
+|---|---:|---:|---:|
+| 5.3 s of audio | 19.4 s, RTF 3.63 | **9.4 s, RTF 1.79** | 2.06× |
+| 19.4 s of audio (S = 757) | 54.1 s, RTF 2.81 | **40.2 s, RTF 2.08** | 1.35× |
+
+Against where the project started (38.1 s, RTF 6.3 for the short sentence) that is
+**4.0×**. Two consequences worth recording:
+
+- **Short is now cheaper per second than long.** Before the cache the fixed prefix
+  made long utterances cheaper; with it removed, what remains grows with length.
+- **Memory at long S rose further.** Sampled peak PSS at S = 757 is ~1.9 GB against
+  1.45 GB before. The prefill materialises `present_key`/`present_value` for the
+  whole sequence (28 × 8 × 757 × 128 floats each) and the slice copies them again;
+  freeing those promptly is the obvious next memory fix.
 `models/onnx/int4_kv/omnivoice_lm_kv.onnx` carries `past_key`/`past_value` in and
 `present_key`/`present_value` out (28 layers × 8 heads × 128), opset 20, sharing
 the same 422 MB weight blob. `scripts/kvcache_probe.py` has the harness

@@ -25,10 +25,11 @@ backend / thread / step benchmark — measured on a **Galaxy S26 Ultra (SM-S948N
 | | |
 |---|---|
 | Deterministic ONNX vs PyTorch, re-masking NLL judge | **2.7325** vs **2.7672** — interchangeable, not merely close |
-| Fastest backend on device | **plain CPU**, 6 threads (XNNPACK +13 %, NNAPI +17 % slower) |
-| 5.4 s utterance, 16 steps, int4 | **19.4 s — RTF 3.6** |
-| 19.3 s utterance | **54.1 s — RTF 2.8** |
-| Peak memory | 769 MB PSS at S = 188, 1.45 GB at S = 757 |
+| Fastest path on device | **CPU**, 6 threads, int8 compute + prefix KV cache. XNNPACK +13 % and NNAPI +17 % slower; the Hexagon NPU (QNN) is 2.37x faster per forward but 0.94x end to end |
+| Script following | the spoken part lights up during playback — exact at chunk boundaries, estimated inside a chunk |
+| 5.3 s utterance, 16 steps, int4, KV cache | **9.4 s — RTF 1.8** (38.1 s where this started) |
+| 19.4 s utterance | **40.2 s — RTF 2.1** |
+| Peak memory | ~0.9 GB PSS at S = 242, ~1.9 GB at S = 757 (sampled) |
 | Voice profile on disk | **1 766 bytes**, no audio kept |
 | Network permissions in the manifest | **none** |
 
@@ -41,17 +42,17 @@ backend / thread / step benchmark — measured on a **Galaxy S26 Ultra (SM-S948N
 <tr>
 <td align="center"><sub>write · the estimate is the device's own measured RTF</sub></td>
 <td align="center"><sub>generate · the ladder is the model's real un-masking state</sub></td>
-<td align="center"><sub>done · every number here was measured on this run</sub></td>
+<td align="center"><sub>done · the spoken part lights up as it plays</sub></td>
 </tr>
 <tr>
 <td><img src="docs/screens/enroll.png" width="200"></td>
 <td><img src="docs/screens/library.png" width="200"></td>
-<td></td>
+<td align="center"><img src="docs/screens/icon.png" width="120"></td>
 </tr>
 <tr>
 <td align="center"><sub>enroll · the script is given, so the transcript is exact</sub></td>
 <td align="center"><sub>voices · 1.8 kB of codec codes each, never a recording</sub></td>
-<td></td>
+<td align="center"><sub>launcher icon · per-codebook unmasking, CB0 to CB7</sub></td>
 </tr>
 </table>
 
@@ -192,8 +193,10 @@ All at int4, guidance 2.0, cold device. Full tables and method in
 
 | backend | threads | steps | audio | latency | RTF | peak PSS |
 |---|---:|---:|---:|---:|---:|---:|
-| **CPU** | **6** | **16** | 19.28 s | **54.1 s** | **2.8** | 1.45 GB |
-| **CPU** | **6** | **16** | 5.35 s | **19.4 s** | **3.6** | — |
+| **CPU + KV cache** | **6** | **16** | 5.26 s | **9.4 s** | **1.8** | — |
+| **CPU + KV cache** | **6** | **16** | 19.36 s | **40.2 s** | **2.1** | ~1.9 GB |
+| CPU (before KV cache) | 6 | 16 | 5.35 s | 19.4 s | 3.6 | — |
+| CPU (before KV cache) | 6 | 16 | 19.28 s | 54.1 s | 2.8 | 1.45 GB |
 | CPU (before §5.1) | 6 | 16 | 6.05 s | 38.1 s | 6.3 | 769 MB |
 | CPU (before §5.1) | 6 | 16 | 1.88 s | 18.5 s | 11.3 | 591 MB |
 | CPU | 6 | 8 | 1.88 s | 7.6 s | 5.4 | — |
@@ -209,10 +212,12 @@ Two results in that table are worth reading twice.
 and 8 land on the prime cores and the whole step then waits on migration and shared thermal
 budget. 6 is the setting the app ships.
 
-**A longer sentence is cheaper per second.** RTF 2.8 for 19.3 s of audio against RTF 3.6 for
-5.4 s — the reference prefix is a fixed cost paid once per generation, so short utterances
-amortise it over almost nothing. The app says so in the compose screen's hint rather than
-hiding it.
+**The KV cache flipped which sentence is cheaper per second.** Before it, a long sentence won —
+RTF 2.8 for 19.3 s against 3.6 for 5.4 s — because the reference prefix was a fixed cost
+re-encoded on every step, and a short sentence amortised it over almost nothing. With the
+prefix encoded once, short now wins: RTF **1.8** for 5.3 s against **2.1** for 19.4 s, because
+what remains grows with the generated length. The compose screen's "one long script beats
+several short ones" hint was measured before the cache and is due a re-measurement.
 
 ---
 
@@ -261,11 +266,14 @@ alone 1.25x. Full working in [`docs/research-notes.md`](docs/research-notes.md) 
   re-running fp32 with different sampling noise. §1.
 - **NNAPI with pinned shapes.** Gets the partitioner from 0 to 142 nodes, which then run
   **5.6x slower** than the whole graph on CPU.
-- **QNN / Hexagon.** The right accelerator for this SoC. The runtime blocker we hit — ORT
-  1.22's bundled QNN SDK shipping V79 HTP skels against the device's V81 — is gone in newer
-  ORT, but the project is not: the QNN EP still needs static bucketed shapes and a quantized
-  model with no `MatMulNBits` path, and our QDQ a16w8 attempt measured NLL 3.331, past the
-  noise floor, at 1209 ms against 766 ms on CPU. §7.7.
+- **QNN / Hexagon — runs, and still does not win.** The NPU was unreachable until the manifest
+  declared `<uses-native-library android:name="libcdsprpc.so">`; since Android 12 an app may
+  only open that vendor FastRPC library if it declares it, and without it `QnnDevice_create`
+  fails with `INVALID_CONFIG` whatever the SDK version. With it, the whole static a16w8 graph
+  compiles onto HTP (context binary: 38 s once, 0.86 s after) and one full forward takes
+  **183 ms against 434 ms on CPU — 2.37x**. But the NPU graph has no KV cache, so 16 steps come
+  to **4 672 ms against 4 383 ms for CPU + KV cache (0.94x)**, and NPU and CPU agree on only
+  190 of 384 argmaxes. The build stays on CPU; retrying is two lines. §7.7b.
 
 **Taken since:** the approximate **prefix KV cache** — see the table above and [`docs/research-notes.md`](docs/research-notes.md) §7.1. The reasoning that priced it: Bidirectional
 attention forbids a cache across the generated region — that is §1.1's central finding — but
@@ -291,8 +299,9 @@ prefix range. That is the remaining lever.
 - **`guidance_scale = 0` is not a speed lever.** It produces pure silence.
 - **int4 has two hard constraints.** `/audio_heads/MatMul` must stay fp32 and the block size
   must be 32. §1.
-- **NNAPI does not help**, and is deprecated as of Android 15. The real accelerator option
-  on this device is QNN / Hexagon — see above.
+- **No accelerator beats the CPU path yet.** NNAPI is slower and deprecated as of Android 15.
+  QNN runs on the Hexagon NPU and is faster per forward, but without a KV-cached static graph
+  and a quantization that survives activation outliers it loses end to end — see above.
 - **The reference transcript is typed by the user.** No Whisper in v1, by design. The app
   hands the user a script to read so the transcript is exact rather than remembered.
 - **Long text is expensive**, quadratically so — attention is `O(S²)` and `S` includes the

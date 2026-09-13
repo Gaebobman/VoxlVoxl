@@ -57,13 +57,14 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val TAG = "OmniVoice.UI"
-        private val STEPS = listOf(8 to "5.4×", 16 to "11.2×", 32 to "24.6×")
-        private val THREADS = listOf(1 to "38.2×", 2 to "22.2×", 4 to "13.9×",
-            6 to "11.6×", 8 to "17.3×")
+        // Measured on the S26 Ultra with int8 compute and the prefix KV cache
+        // (2026-09-13); "—" where the current path has not been measured.
+        private val STEPS = listOf(8 to "—", 16 to "1.8×", 32 to "—")
+        private val THREADS = listOf(1 to "—", 2 to "—", 4 to "—", 6 to "1.8×", 8 to "—")
         private val BACKENDS = listOf(
-            Triple(Backend.CPU, "11.06×", ""),
-            Triple(Backend.XNNPACK, "12.46×", "0/2785 nodes"),
-            Triple(Backend.NNAPI, "12.94×", "0/2785 nodes"),
+            Triple(Backend.CPU, "1.8×", ""),
+            Triple(Backend.XNNPACK, "slower", "0/2785 nodes"),
+            Triple(Backend.NNAPI, "slower", "0/2785 nodes"),
         )
     }
 
@@ -606,6 +607,21 @@ class MainActivity : AppCompatActivity() {
      * device actually measured, so the number on screen is the number the user
      * will live through.
      */
+    private val prefs by lazy { getSharedPreferences("voxlvoxl", MODE_PRIVATE) }
+
+    /**
+     * RTF for the compose estimate. The table this replaced was measured before
+     * int8 compute and the prefix KV cache, and told users ~60 s for a sentence
+     * that takes 9. So: what this device last measured at this step count, and
+     * until it has, the 16-step RTF measured on the S26 Ultra (1.8) scaled by the
+     * step count -- the un-masking loop is nearly all of the time, and RTF was
+     * measured to scale linearly with steps (5.4 / 11.2 / 24.6 at 8 / 16 / 32).
+     */
+    private fun estimateRtf(stepCount: Int): Float {
+        val measured = prefs.getFloat("rtf_s$stepCount", -1f)
+        return if (measured > 0f) measured else 1.8f * stepCount / 16f
+    }
+
     private fun updateEstimate() {
         val text = id<EditText>(R.id.targetText).text.toString()
         val det = LanguageDetector.detect(text)
@@ -614,7 +630,7 @@ class MainActivity : AppCompatActivity() {
         val p = selected
         val frames = DurationEstimator.estimateFrames(text, p?.refText, p?.frames ?: 0)
         val audio = frames.toFloat() / OV.FRAME_RATE
-        val rtf = when (steps) { 8 -> 5.4f; 32 -> 24.6f; else -> 11.2f }
+        val rtf = estimateRtf(steps)
         id<TextView>(R.id.composeEstimate).text =
             "≈%.1fs audio · RTF %.1f → %ds".format(audio, rtf, (audio * rtf).toInt())
     }
@@ -732,6 +748,8 @@ class MainActivity : AppCompatActivity() {
             }
             is SynthesisService.Status.Done -> {
                 lastResult = s.result
+                prefs.edit().putFloat("rtf_s$steps", s.result.metrics.rtf.toFloat()).apply()
+                updateEstimate()
                 player.onFinished = {
                     setPlayIcon(R.id.resultPlay, false)
                     stopTicking()
