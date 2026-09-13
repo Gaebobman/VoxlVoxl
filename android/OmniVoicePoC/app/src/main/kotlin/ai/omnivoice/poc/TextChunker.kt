@@ -71,6 +71,23 @@ object TextChunker {
      * Equal-power cross-fade, used to join chunk boundaries. Upstream applies the
      * same idea in `cross_fade_chunks`.
      */
+    /**
+     * Where each part begins in [crossFade]'s output. Kept beside it, with the
+     * same overlap rule, so the two cannot drift apart.
+     */
+    fun crossFadeStarts(sizes: IntArray, sr: Int, fadeSeconds: Float = 0.05f): IntArray {
+        val starts = IntArray(sizes.size)
+        if (sizes.isEmpty()) return starts
+        val fade = (fadeSeconds * sr).toInt().coerceAtLeast(1)
+        var pos = sizes[0]
+        for (i in 1 until sizes.size) {
+            val n = minOf(fade, sizes[i], pos)
+            starts[i] = pos - n
+            pos += sizes[i] - n
+        }
+        return starts
+    }
+
     fun crossFade(parts: List<FloatArray>, sr: Int, fadeSeconds: Float = 0.05f): FloatArray {
         if (parts.isEmpty()) return FloatArray(0)
         if (parts.size == 1) return parts[0]

@@ -63,10 +63,65 @@ data class SynthesisMetrics(
     val rtf: Double get() = if (audioSeconds > 0) totalMillis / 1000.0 / audioSeconds else Double.NaN
 }
 
+/**
+ * Where each part of the input text lands in the output audio, so playback can
+ * follow along in the script.
+ *
+ * OmniVoice emits no text-audio alignment. This is exact at chunk boundaries,
+ * where each chunk's audio length is known, and estimated inside a chunk by
+ * spreading its duration over characters with the same per-character weights
+ * DurationEstimator uses to predict length -- phrase-level, not syllable-level.
+ * Post-processing removes long internal silences, so an output sample is first
+ * mapped back to the vocoder sample it came from, through [pieces].
+ */
+class TextTimeline(
+    val text: String,
+    /** Flattened `(outStart, srcStart, length)` triples, in output order. */
+    private val pieces: IntArray,
+    private val chunks: List<Chunk>,
+) {
+    class Chunk(
+        val charStart: Int, val charEnd: Int,
+        val srcStart: Int, val srcEnd: Int,
+        /** Cumulative normalised weight through each character; the last is 1. */
+        val cumulative: DoubleArray,
+    )
+
+    /** How many characters have been spoken by [outSample]: highlight `[0, result)`. */
+    fun spokenThrough(outSample: Int): Int {
+        if (pieces.isEmpty() || chunks.isEmpty()) return 0
+        var src = -1
+        var i = 0
+        while (i < pieces.size) {
+            val o = pieces[i]; val s = pieces[i + 1]; val n = pieces[i + 2]
+            if (outSample < o) break
+            src = if (outSample < o + n) s + (outSample - o) else s + n
+            i += 3
+        }
+        if (src < 0) return 0                       // still in the leading pad
+        for (c in chunks) {
+            if (src >= c.srcEnd) continue
+            if (src < c.srcStart) return c.charStart
+            val len = c.charEnd - c.charStart
+            if (len <= 0) return c.charEnd
+            val f = (src - c.srcStart).toDouble() / (c.srcEnd - c.srcStart)
+            var lo = 0
+            var hi = len - 1
+            while (lo < hi) {
+                val mid = (lo + hi) / 2
+                if (c.cumulative[mid] < f) lo = mid + 1 else hi = mid
+            }
+            return c.charStart + lo + 1
+        }
+        return text.length
+    }
+}
+
 data class AudioResult(
     val samples: FloatArray,
     val sampleRate: Int,
     val metrics: SynthesisMetrics,
+    val timeline: TextTimeline? = null,
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = System.identityHashCode(this)

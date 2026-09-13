@@ -122,9 +122,17 @@ object SilenceUtils {
     fun removeSilence(
         x: FloatArray, sr: Int, midSil: Int = 300, leadSil: Int = 100,
         trailSil: Int = 300, silenceThreshDb: Double = -50.0,
-    ): FloatArray {
-        if (x.isEmpty()) return x
+    ): FloatArray =
+        removeSilenceMapped(x, sr, midSil, leadSil, trailSil, silenceThreshDb).first
+
+    fun removeSilenceMapped(
+        x: FloatArray, sr: Int, midSil: Int = 300, leadSil: Int = 100,
+        trailSil: Int = 300, silenceThreshDb: Double = -50.0,
+    ): Pair<FloatArray, IntArray> {
+        if (x.isEmpty()) return Pair(x, IntArray(0))
         var xi = toI16(x)
+        // flattened [srcStart, srcEnd) of every kept piece, in output order
+        var segs = intArrayOf(0, xi.size)
 
         if (midSil > 0) {
             val nonsilent = detectNonsilent(xi, sr, midSil, silenceThreshDb, seekStep = 10)
@@ -143,12 +151,15 @@ object SilenceUtils {
                 p += r[1] - r[0]
             }
             xi = merged
+            segs = IntArray(pieces.size * 2)
+            for ((j, r) in pieces.withIndex()) { segs[2 * j] = r[0]; segs[2 * j + 1] = r[1] }
         }
 
         if (xi.isNotEmpty()) {
             val head = maxOf(0, detectLeadingSilence(xi, sr, silenceThreshDb) - leadSil)
             val off = msToSample(head, sr).coerceIn(0, xi.size)
             xi = xi.copyOfRange(off, xi.size)
+            segs = dropFront(segs, off)
         }
         if (xi.isNotEmpty()) {
             val rev = ShortArray(xi.size) { xi[xi.size - 1 - it] }
@@ -156,9 +167,37 @@ object SilenceUtils {
             val off = msToSample(tail, sr).coerceIn(0, rev.size)
             val cut = rev.copyOfRange(off, rev.size)
             xi = ShortArray(cut.size) { cut[cut.size - 1 - it] }
+            segs = dropBack(segs, off)
         }
-        return toF32(xi)
+        return Pair(toF32(xi), segs)
     }
+
+    /** Drop the first [k0] samples from a flattened segment list. */
+    private fun dropFront(segs: IntArray, k0: Int): IntArray {
+        var k = k0
+        val out = ArrayList<Int>(segs.size)
+        var j = 0
+        while (j < segs.size) {
+            var a = segs[j]; val b = segs[j + 1]
+            if (k >= b - a) k -= b - a else { a += k; k = 0; out.add(a); out.add(b) }
+            j += 2
+        }
+        return out.toIntArray()
+    }
+
+    /** Drop the last [k0] samples from a flattened segment list. */
+    private fun dropBack(segs: IntArray, k0: Int): IntArray {
+        var k = k0
+        val out = ArrayList<Int>(segs.size)
+        var j = segs.size - 2
+        while (j >= 0) {
+            val a = segs[j]; var b = segs[j + 1]
+            if (k >= b - a) k -= b - a else { b -= k; k = 0; out.add(0, b); out.add(0, a) }
+            j -= 2
+        }
+        return out.toIntArray()
+    }
+
 
     /** Port of `omnivoice.utils.audio.fade_and_pad_audio`. */
     fun fadeAndPad(
@@ -183,9 +222,21 @@ object SilenceUtils {
     }
 
     /** Port of `_post_process_audio`. [refRms] null means "no reference". */
-    fun postProcess(x: FloatArray, refRms: Float?, cfg: GenConfig): FloatArray {
+    fun postProcess(x: FloatArray, refRms: Float?, cfg: GenConfig): FloatArray =
+        postProcessMapped(x, refRms, cfg).first
+
+    /**
+     * [postProcess], plus the map from output samples back to input samples as
+     * flattened `(outStart, srcStart, length)` triples -- what TextTimeline needs
+     * to follow the script through removed silences and padding.
+     */
+    fun postProcessMapped(x: FloatArray, refRms: Float?, cfg: GenConfig): Pair<FloatArray, IntArray> {
         var y = x
-        if (cfg.postprocessOutput) y = removeSilence(y, OV.SR_24K, 500, 100, 100)
+        var segs = intArrayOf(0, x.size)
+        if (cfg.postprocessOutput) {
+            val (r, m) = removeSilenceMapped(y, OV.SR_24K, 500, 100, 100)
+            y = r; segs = m
+        }
         if (refRms != null && refRms < 0.1f) {
             y = FloatArray(y.size) { y[it] * refRms / 0.1f }
         } else if (refRms == null) {
@@ -193,7 +244,16 @@ object SilenceUtils {
             for (v in y) peak = maxOf(peak, Math.abs(v))
             if (peak > 1e-6f) y = FloatArray(y.size) { y[it] / peak * 0.5f }
         }
-        return fadeAndPad(y, OV.SR_24K, cfg.padSeconds, cfg.fadeSeconds)
+        val out = fadeAndPad(y, OV.SR_24K, cfg.padSeconds, cfg.fadeSeconds)
+        val pad = if (y.isEmpty()) 0 else (out.size - y.size) / 2
+        val pieces = IntArray(segs.size / 2 * 3)
+        var at = pad
+        for (k in 0 until segs.size / 2) {
+            val a = segs[2 * k]; val b = segs[2 * k + 1]
+            pieces[3 * k] = at; pieces[3 * k + 1] = a; pieces[3 * k + 2] = b - a
+            at += b - a
+        }
+        return Pair(out, pieces)
     }
 
     /** Round the sample count down to a whole codec frame (hop 960). */

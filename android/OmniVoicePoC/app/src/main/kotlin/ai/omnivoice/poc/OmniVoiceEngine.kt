@@ -1,5 +1,6 @@
 package ai.omnivoice.poc
 
+import ai.omnivoice.poc.core.TextTimeline
 import ai.omnivoice.poc.core.AudioResult
 import ai.omnivoice.poc.core.SpeechSynthesizer
 import ai.omnivoice.poc.core.SynthesisCancelledException
@@ -114,7 +115,7 @@ class OmniVoiceEngine(
 
         val raw = TextChunker.crossFade(parts, OV.SR_24K)
         val tPost = System.nanoTime()
-        val wav = SilenceUtils.postProcess(raw, voiceProfile?.refRms, cfg)
+        val (wav, pieces) = SilenceUtils.postProcessMapped(raw, voiceProfile?.refRms, cfg)
         val postMillis = (System.nanoTime() - tPost) / 1_000_000
 
         if (wav.isEmpty()) {
@@ -144,7 +145,42 @@ class OmniVoiceEngine(
             "(RTF ${"%.2f".format(metrics.rtf)}, ${runner.lmCalls} LM calls, " +
             "${chunks.size} chunk(s), thermal=${metrics.thermalStatus})")
 
-        return AudioResult(wav, OV.SR_24K, metrics)
+        return AudioResult(wav, OV.SR_24K, metrics,
+            timeline(text, chunks, IntArray(parts.size) { parts[it].size }, pieces))
+    }
+
+    /** See [TextTimeline]: exact at chunk boundaries, weighted estimate inside. */
+    private fun timeline(
+        text: String, chunks: List<String>, sizes: IntArray, pieces: IntArray,
+    ): TextTimeline {
+        val starts = TextChunker.crossFadeStarts(sizes, OV.SR_24K)
+        // chunks are trimmed and re-joined sentences, so locate each by its opening
+        val charStarts = IntArray(chunks.size)
+        var cursor = 0
+        for ((i, c) in chunks.withIndex()) {
+            val probe = c.take(12)
+            val at = if (probe.isEmpty()) -1 else text.indexOf(probe, cursor)
+            charStarts[i] = if (at >= 0) at else cursor
+            cursor = (charStarts[i] + 1).coerceAtMost(text.length)
+        }
+        val end = text.trimEnd().length
+        val spans = chunks.indices.map { i ->
+            val cs = charStarts[i]
+            val ce = if (i + 1 < chunks.size) charStarts[i + 1] else end
+            val seg = if (ce > cs) text.substring(cs, ce) else ""
+            val w = DoubleArray(seg.length) { DurationEstimator.textWeight(seg[it].toString()) }
+            val total = w.sum()
+            val cum = DoubleArray(seg.length)
+            var acc = 0.0
+            for (k in w.indices) {
+                acc += if (total > 0) w[k] / total else 1.0 / w.size
+                cum[k] = acc
+            }
+            if (cum.isNotEmpty()) cum[cum.size - 1] = 1.0
+            val srcEnd = if (i + 1 < chunks.size) starts[i + 1] else starts[i] + sizes[i]
+            TextTimeline.Chunk(cs, ce, starts[i], srcEnd, cum)
+        }
+        return TextTimeline(text, pieces, spans)
     }
 
     /** One chunk: prompt assembly + the CFG un-masking loop. */

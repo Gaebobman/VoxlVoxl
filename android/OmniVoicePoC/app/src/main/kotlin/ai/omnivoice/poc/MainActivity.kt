@@ -10,6 +10,7 @@ import ai.omnivoice.poc.ui.Motion.animateInt
 import ai.omnivoice.poc.ui.Motion.animateNextLayout
 import ai.omnivoice.poc.ui.Motion.enterScreen
 import ai.omnivoice.poc.ui.Motion.pressableTree
+import ai.omnivoice.poc.core.TextTimeline
 import ai.omnivoice.poc.ui.WaveformView
 import android.Manifest
 import android.content.ComponentName
@@ -22,6 +23,8 @@ import android.os.Bundle
 import android.os.IBinder
 import android.text.Editable
 import android.text.TextWatcher
+import android.text.method.ScrollingMovementMethod
+import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -122,6 +125,10 @@ class MainActivity : AppCompatActivity() {
         profiles = FileVoiceProfileManager(File(filesDir, "voices"))
         wire()
         screens.pressableTree()
+        // Set after pressableTree: a movement method makes a TextView clickable,
+        // and a scrolling script should not dip like a button.
+        id<TextView>(R.id.resultText).movementMethod = ScrollingMovementMethod()
+        id<TextView>(R.id.genText).movementMethod = ScrollingMovementMethod()
         buildDevControls()
         refreshVoices()
 
@@ -729,6 +736,7 @@ class MainActivity : AppCompatActivity() {
                     setPlayIcon(R.id.resultPlay, false)
                     stopTicking()
                     id<WaveformView>(R.id.resultWave).progress = 0f
+                    highlightSpoken(0)
                     id<TextView>(R.id.resultTime).text =
                         "0:00 / %s".format(clock(s.result.metrics.audioSeconds))
                 }
@@ -750,8 +758,39 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var resultTimeline: TextTimeline? = null
+    private var spokenUpTo = -1
+    private val spokenSpan by lazy { ForegroundColorSpan(getColor(R.color.accent_light)) }
+
+    /**
+     * Follow along in the script while the result plays. The model emits no
+     * alignment, so this is exact at chunk boundaries and estimated inside a
+     * chunk from DurationEstimator's per-character weights: close at phrase
+     * level, not at syllable level. Keeps the spoken line in the upper third.
+     */
+    private fun highlightSpoken(upTo: Int) {
+        if (upTo == spokenUpTo) return
+        spokenUpTo = upTo
+        val tv = id<TextView>(R.id.resultText)
+        val sp = tv.text as? android.text.Spannable ?: return
+        sp.removeSpan(spokenSpan)
+        if (upTo <= 0) { tv.scrollTo(0, 0); return }
+        val end = upTo.coerceAtMost(sp.length)
+        sp.setSpan(spokenSpan, 0, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val layout = tv.layout ?: return
+        val visible = tv.height - tv.totalPaddingTop - tv.totalPaddingBottom
+        val y = layout.getLineTop(layout.getLineForOffset(end))
+        val target = (y - visible / 3).coerceIn(0, maxOf(0, layout.height - visible))
+        if (target != tv.scrollY) tv.scrollTo(0, target)
+    }
+
     private fun showResult(r: AudioResult) {
-        id<TextView>(R.id.resultText).text = id<TextView>(R.id.genText).text
+        resultTimeline = r.timeline
+        spokenUpTo = -1
+        id<TextView>(R.id.resultText).apply {
+            setText(r.timeline?.text ?: id<TextView>(R.id.genText).text, TextView.BufferType.SPANNABLE)
+            scrollTo(0, 0)
+        }
         id<WaveformView>(R.id.resultWave).apply {
             tone = WaveformView.Tone.AMBER
             setWaveform(r.samples, buckets = 52)
@@ -827,6 +866,9 @@ class MainActivity : AppCompatActivity() {
             override fun run() {
                 val p = player.progress
                 wave.progress = p
+                if (buttonId == R.id.resultPlay) resultTimeline?.let {
+                    highlightSpoken(it.spokenThrough((p * total * OV.SR_24K).toInt()))
+                }
                 clock?.text = "%s / %s".format(clock(p * total.toDouble()), clock(total.toDouble()))
                 if (player.state != AudioOutput.State.PLAYING) {
                     setPlayIcon(buttonId, false)
