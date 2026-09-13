@@ -59,8 +59,8 @@ class MainActivity : AppCompatActivity() {
             6 to "11.6×", 8 to "17.3×")
         private val BACKENDS = listOf(
             Triple(Backend.CPU, "11.06×", ""),
-            Triple(Backend.XNNPACK, "12.46×", "0 노드"),
-            Triple(Backend.NNAPI, "12.94×", "0 노드"),
+            Triple(Backend.XNNPACK, "12.46×", "0/2785 nodes"),
+            Triple(Backend.NNAPI, "12.94×", "0/2785 nodes"),
         )
     }
 
@@ -529,7 +529,7 @@ class MainActivity : AppCompatActivity() {
             setWaveform(echo, buckets = 44)
         }
         id<TextView>(R.id.verifyMeta).text =
-            "%.1f초 · %d ms 만에 준비됨".format(p.frames.toFloat() / OV.FRAME_RATE, millis)
+            "%.1fs · T_ref=%d frames · encode %d ms".format(p.frames.toFloat() / OV.FRAME_RATE, p.frames, millis)
         // Pre-filled with the timestamp so keeping a voice is still one tap, but
         // this is the one moment the user knows what they just recorded.
         id<EditText>(R.id.verifyName).setText(p.displayName)
@@ -544,9 +544,9 @@ class MainActivity : AppCompatActivity() {
         val dp = resources.displayMetrics.density
         val secs = p.frames.toFloat() / OV.FRAME_RATE
         val items = listOf(
-            "%.1f초 확보 — 3초 이상".format(secs) to (secs >= VoiceRecorder.MIN_SECONDS),
-            "레벨 적정 (rms %.3f)".format(p.refRms) to (p.refRms in 0.01f..0.5f),
-            "읽은 문장 기록됨" to p.refText.isNotBlank(),
+            "duration %.1fs ≥ 3s".format(secs) to (secs >= VoiceRecorder.MIN_SECONDS),
+            "RMS %.3f ∈ [0.01, 0.5]".format(p.refRms) to (p.refRms in 0.01f..0.5f),
+            "reference transcript 있음" to p.refText.isNotBlank(),
         )
         for ((text, ok) in items) {
             box.addView(LinearLayout(this).apply {
@@ -588,7 +588,7 @@ class MainActivity : AppCompatActivity() {
         val p = selected
         id<TextView>(R.id.composeVoiceName).text = p?.displayName ?: getString(R.string.no_voice)
         id<TextView>(R.id.composeVoiceMeta).text =
-            p?.let { "%.1f초 참조".format(it.frames.toFloat() / OV.FRAME_RATE) } ?: ""
+            p?.let { "ref %.1fs · T_ref=%d".format(it.frames.toFloat() / OV.FRAME_RATE, it.frames) } ?: ""
         id<LinearLayout>(R.id.composeVoice).setOnClickListener { show(Screen.LIBRARY) }
         id<TextView>(R.id.composeVoiceHint).text = getString(R.string.change_voice)
         updateEstimate()
@@ -609,7 +609,7 @@ class MainActivity : AppCompatActivity() {
         val audio = frames.toFloat() / OV.FRAME_RATE
         val rtf = when (steps) { 8 -> 5.4f; 32 -> 24.6f; else -> 11.2f }
         id<TextView>(R.id.composeEstimate).text =
-            "약 %.1f초 · 만드는 데 %d초".format(audio, (audio * rtf).toInt())
+            "≈%.1fs audio · RTF %.1f → %ds".format(audio, rtf, (audio * rtf).toInt())
     }
 
     private fun startGeneration(overrideText: String? = null) {
@@ -709,7 +709,7 @@ class MainActivity : AppCompatActivity() {
         when (s) {
             is SynthesisService.Status.Loading -> {
                 id<TextView>(R.id.genEta).animateInt(0, duration = 0L)
-                id<TextView>(R.id.genEtaUnit).text = "%  모델 여는 중"
+                id<TextView>(R.id.genEtaUnit).text = "%  session load"
             }
             is SynthesisService.Status.Running -> {
                 val p = s.progress
@@ -718,9 +718,9 @@ class MainActivity : AppCompatActivity() {
                 // jumps back up reads as the app being wrong.
                 id<TextView>(R.id.genEta).animateInt((p.fraction * 100).toInt())
                 id<TextView>(R.id.genEtaUnit).text = "%"
-                id<TextView>(R.id.genStep).text = "${p.step} / ${p.totalSteps} 단계"
+                id<TextView>(R.id.genStep).text = "step ${p.step} / ${p.totalSteps}"
                 id<TextView>(R.id.genCells).text =
-                    "${p.cellsTotal - p.cellsRemaining} / ${p.cellsTotal} 칸"
+                    "${p.cellsTotal - p.cellsRemaining} / ${p.cellsTotal} tokens unmasked"
                 id<CodebookLadderView>(R.id.ladder).setProgress(p.perCodebook)
             }
             is SynthesisService.Status.Done -> {
@@ -762,7 +762,7 @@ class MainActivity : AppCompatActivity() {
         val m = r.metrics
         id<TextView>(R.id.metricsRtf).text = "%.1f".format(m.rtf)
         id<TextView>(R.id.metricsWall).text =
-            "%.2f초를 %.1f초에".format(m.audioSeconds, m.totalMillis / 1000.0)
+            "%.2fs audio / %.1fs wall".format(m.audioSeconds, m.totalMillis / 1000.0)
         id<TextView>(R.id.metricsConfig).text = "$backend ×$threads · int4"
         val table = id<TableLayout>(R.id.metricsTable)
         table.removeAllViews()
@@ -775,9 +775,9 @@ class MainActivity : AppCompatActivity() {
                 addView(cell(bv, true).apply { setPadding((10 * dp).toInt(), (3 * dp).toInt(), 0, (3 * dp).toInt()) })
             })
         }
-        row("생성", "${m.generateMillis} ms", "보코더", "${m.decodeMillis} ms")
-        row("모델 로드", "${m.modelLoadMillis} ms", "후처리", "${m.postMillis} ms")
-        row("시퀀스", "${m.sequenceLength}", "청크", "${m.chunks}")
+        row("LM decode", "${m.generateMillis} ms", "Vocoder", "${m.decodeMillis} ms")
+        row("Session load", "${m.modelLoadMillis} ms", "Post-proc", "${m.postMillis} ms")
+        row("S (seq len)", "${m.sequenceLength}", "Chunks", "${m.chunks}")
         id<LinearLayout>(R.id.genThermal).visibility =
             if (m.thermalStatus > 0) View.VISIBLE else View.GONE
         show(Screen.RESULT)

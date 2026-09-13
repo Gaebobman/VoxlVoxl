@@ -5,17 +5,17 @@
     <!-- first run -->
     <string name="first_run_title">목소리 모델을\n기기에 설치합니다</string>
     <string name="first_run_body">한 번만 받으면 그 뒤로는 인터넷 없이 동작합니다. 음성은 이 기기 밖으로 나가지 않습니다.</string>
-    <string name="first_run_skip_note">등록 모델을 건너뛰면 654 MB를 아끼는 대신, 이 기기에서 새 목소리를 등록할 수 없습니다.</string>
+    <string name="first_run_skip_note">Codec encoder(acoustic · semantic · quantizer)를 건너뛰면 654 MB를 아끼는 대신, 이 기기에서 voice enrollment(reference audio → RVQ codes)를 할 수 없습니다.</string>
     <string name="first_run_continue">계속</string>
 
     <!-- voices -->
     <string name="voices_title">내 목소리</string>
-    <string name="voices_body">말투마다 따로 등록하세요. 속삭임은 설정이 아니라 속삭이며 한 녹음입니다.</string>
+    <string name="voices_body">스타일마다 별도 reference prompt로 등록하세요. 속삭임은 instruct가 아니라 참조 음성의 prosody로 전이됩니다 (zero-shot voice cloning).</string>
     <string name="voices_add">새 말투 등록</string>
     <string name="voices_none">아직 등록된 목소리가 없습니다</string>
     <string name="privacy_title">이 기기 밖으로 나가지 않습니다</string>
     <string name="privacy_short">이 기기 밖으로 나가지 않습니다 · 녹음 원본 미저장</string>
-    <string name="privacy_body">앱에 네트워크 권한 자체가 없습니다. 녹음 원본은 저장하지 않고, 목소리 하나가 1.8 kB의 숫자로만 남습니다.</string>
+    <string name="privacy_body">앱에 INTERNET 권한 자체가 없습니다. 녹음 원본은 저장하지 않고, 목소리 하나가 1.8 kB의 RVQ codes(8 codebooks × T_ref frames)로만 남습니다.</string>
     <string name="test">테스트</string>
     <string name="rerecord">재녹음</string>
     <string name="delete">삭제</string>
@@ -24,55 +24,55 @@
     <string name="enroll_step1">등록 1/2</string>
     <string name="enroll_step2">등록 2/2</string>
     <string name="enroll_title">아래 문장을\n편하게 읽어주세요</string>
-    <string name="enroll_body">읽을 문장을 드리면 무엇을 말했는지 받아적지 않아도 됩니다. 받아적은 내용이 틀리면 목소리가 조용히 나빠집니다.</string>
+    <string name="enroll_body">문장을 드리면 reference transcript를 받아적지 않아도 됩니다. Transcript가 틀리면 text–audio alignment가 어긋나 cloning 품질이 조용히 떨어집니다.</string>
     <string name="enroll_own">내가 쓴 문장으로 녹음하기</string>
     <string name="enroll_start">녹음 시작</string>
     <string name="enroll_stop">녹음 끝내기</string>
     <string name="enroll_working">변환 중…</string>
-    <string name="enroll_working_note">목소리를 모델이 쓰는 형태로 바꾸는 중입니다. 3초쯤 걸립니다.</string>
+    <string name="enroll_working_note">Higgs Audio V2 codec으로 encoding 중입니다 (waveform → RVQ codes, 25 fps). 3초쯤 걸립니다.</string>
     <string name="enroll_min">3초 이상</string>
     <string name="enroll_max">12초</string>
     <string name="enroll_band">권장 구간</string>
 
     <!-- verify -->
-    <string name="verify_title">이게 시스템이\n들은 소리입니다</string>
-    <string name="verify_body">녹음을 그대로 재생하는 게 아니라, 앞으로 모델이 참고하게 될 형태로 바꿨다가 되돌린 소리입니다. 여기서 이상하면 나중에도 이상합니다.</string>
+    <string name="verify_title">Codec reconstruction\n결과입니다</string>
+    <string name="verify_body">원본 재생이 아니라 encode → decode를 거친 codec reconstruction입니다. 생성 품질의 upper bound이므로, 여기서 이상하면 생성 결과도 이상합니다.</string>
     <string name="verify_listen">들어보기</string>
     <string name="verify_keep">이 목소리 저장</string>
     <string name="verify_again">다시 녹음</string>
-    <string name="verify_privacy">녹음 원본은 저장하지 않습니다. 이 목소리는 1.8 kB의 숫자로만 남습니다.</string>
+    <string name="verify_privacy">녹음 원본은 저장하지 않습니다. 이 목소리는 1.8 kB의 RVQ codes로만 남습니다.</string>
 
     <!-- compose -->
     <string name="compose_hint">말하게 할 내용</string>
     <string name="compose_go">내 목소리로 만들기</string>
     <string name="change_voice">목소리 바꾸기</string>
-    <string name="compose_batch">여러 문장을 한 번에 넣는 편이 빠릅니다 — 문장마다 나누면 총 시간이 약 2배</string>
-    <string name="no_voice">목소리 없이 (보이스 디자인)</string>
+    <string name="compose_batch">Reference prefix 인코딩은 생성마다 드는 고정 비용입니다 — 문장마다 나누면 prefix를 반복 처리해 총 시간이 약 2배</string>
+    <string name="no_voice">Voice design (reference prompt 없음)</string>
 
     <!-- generating -->
     <string name="gen_tag">만드는 중</string>
-    <string name="gen_ladder">목소리의 윤곽이 먼저 잡히고, 세부가 나중에 채워집니다</string>
-    <string name="ladder_top">윤곽</string>
-    <string name="ladder_bottom">세부</string>
+    <string name="gen_ladder">Codebook별 unmasking 진행률 — layer_penalty_factor 때문에 낮은 RVQ 층(CB0)이 먼저 확정됩니다</string>
+    <string name="ladder_top">CB0</string>
+    <string name="ladder_bottom">CB7</string>
     <string name="gen_cancel">취소</string>
     <string name="gen_next">기다리는 동안 다음 문장</string>
     <string name="gen_queue_hint">다음에 말할 내용…</string>
-    <string name="gen_thermal">기기가 따뜻해 평소보다 느립니다 — 식으면 약 2배 빨라집니다</string>
+    <string name="gen_thermal">Thermal throttling(DVFS) 중 — sustained throughput은 cold 대비 약 절반입니다</string>
 
     <!-- result -->
     <string name="result_tag">완료</string>
     <string name="save_wav">WAV 저장</string>
     <string name="share">공유</string>
-    <string name="measured">측정값</string>
+    <string name="measured">Metrics</string>
 
     <!-- developer -->
     <string name="dev_title">개발자 설정</string>
-    <string name="dev_steps">디코딩 단계</string>
-    <string name="dev_steps_note">16이 실측 무릎점입니다. 8은 품질이 모델 자체 샘플링 편차보다 더 떨어집니다.</string>
-    <string name="dev_backend">실행 백엔드</string>
-    <string name="dev_backend_note">가속기가 가져간 노드 0개. 연산의 85%가 int4 GEMM이고 어느 쪽도 구현하지 않습니다.</string>
-    <string name="dev_threads">스레드</string>
-    <string name="dev_threads_note">8은 6보다 느립니다 — 7·8번 스레드가 프라임 코어에 올라가 스텝 전체가 대기합니다.</string>
+    <string name="dev_steps">Unmasking steps (num_step)</string>
+    <string name="dev_steps_note">16이 knee point. 8에서는 re-masking NLL이 stochastic fp32 noise floor(3.12)를 넘습니다.</string>
+    <string name="dev_backend">Execution provider</string>
+    <string name="dev_backend_note">Dynamic shape 때문에 XNNPACK·NNAPI가 claim한 노드 0 / 2785. 연산의 85%가 int4 GEMM(MatMulNBits)이고 두 EP 모두 미지원입니다.</string>
+    <string name="dev_threads">intra_op threads</string>
+    <string name="dev_threads_note">8 &lt; 6: 7·8번 스레드가 prime core로 스케줄되어 step 전체가 대기합니다 (heterogeneous cores).</string>
     <string name="verify_name_hint">이 목소리의 이름</string>
     <string name="voice_rename">이름</string>
     <string name="voice_rename_title">이름 바꾸기</string>

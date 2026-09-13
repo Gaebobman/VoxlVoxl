@@ -682,8 +682,9 @@ machine, the same configuration varied 6.6–12.4 s.
 
 ### 7.9 Codebook ablation — which layers of the RVQ actually matter
 
-The UI claims the voice's outline resolves before its detail, which is a claim
-about the residual quantiser and therefore testable. `scripts/codebook_ablation.py`
+The generating screen shows per-codebook unmasking progress, and an earlier
+version of its caption claimed the voice's outline resolves before its detail.
+That is a claim about the residual quantiser and therefore testable. `scripts/codebook_ablation.py`
 randomises one codebook at a time and re-decodes (12 trials, LSD and SNR against
 the intact decode):
 
