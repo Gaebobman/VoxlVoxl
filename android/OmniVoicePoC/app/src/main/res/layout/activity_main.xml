@@ -28,5 +28,6 @@
         <include layout="@layout/screen_generating" />
         <include layout="@layout/screen_result" />
         <include layout="@layout/screen_dev" />
+        <include layout="@layout/screen_licenses" />
     </FrameLayout>
 </FrameLayout>

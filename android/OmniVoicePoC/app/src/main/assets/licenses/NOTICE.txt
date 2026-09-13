@@ -1,0 +1,76 @@
+VoxlVoxl
+Copyright 2026 The VoxlVoxl Authors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE). That licence
+covers this repository's own code and documentation only. It does not extend
+to the third-party code, fonts and model weights listed below, each of which
+keeps its own licence.
+
+Full texts of every licence named here are in
+android/OmniVoicePoC/app/src/main/assets/licenses/, and the app shows them
+under 개발자 설정 -> 오픈소스 라이선스.
+
+==============================================================================
+Code derived from third-party sources
+==============================================================================
+
+OmniVoice -- k2-fsa/OmniVoice authors -- Apache License 2.0
+https://github.com/k2-fsa/OmniVoice
+  Ported to Kotlin, with modifications:
+    DurationEstimator.kt  <- omnivoice/utils/duration.py (RuleDurationEstimator)
+    UnmaskSchedule.kt     <- omnivoice/models/omnivoice.py (_get_time_steps,
+                             the schedule loop in _generate_iterative)
+    OmniVoiceEngine.kt    <- omnivoice/models/omnivoice.py (prompt assembly and
+                             the classifier-free-guidance un-masking loop)
+    OmniVoiceStyle.kt     <- omnivoice/models/omnivoice.py (_resolve_instruct)
+    TextUtils.kt          <- omnivoice/models/omnivoice.py (_combine_text,
+                             add_punctuation)
+    SilenceUtils.kt       <- omnivoice/utils/audio.py (remove_silence,
+                             fade_and_pad_audio) and _post_process_audio
+  The Python in scripts/ loads, exports, quantizes and validates the upstream
+  model and reproduces its inference loop.
+
+pydub -- Copyright (c) 2011 James Robert -- MIT License
+https://github.com/jiaaro/pydub
+  SilenceUtils.kt ports pydub.silence (detect_silence, detect_nonsilent,
+  detect_leading_silence).
+
+==============================================================================
+Bundled in the app
+==============================================================================
+
+Pretendard -- Copyright (c) 2021 Kil Hyung-jin -- SIL Open Font License 1.1
+ONNX Runtime 1.29.0 -- Copyright (c) Microsoft Corporation -- MIT License,
+  and the third-party components in onnxruntime-ThirdPartyNotices.txt
+AndroidX, Kotlin standard library, kotlinx.coroutines,
+  Guava ListenableFuture -- Apache License 2.0
+
+==============================================================================
+Model weights -- not in this repository
+==============================================================================
+
+Downloaded by scripts/download_models.py and pushed to the device separately.
+
+OmniVoice model weights and tokenizer (k2-fsa/OmniVoice) -- Apache License 2.0
+Codec ONNX graphs (onnx-community/OmniVoice-Onnx) -- Apache License 2.0
+
+Higgs Audio V2 codec weights -- Boson Higgs Audio 2 Community License,
+based on the Meta Llama 3 Community License. OmniVoice cannot produce audio
+without this codec, so these terms reach any product built on it. Among them:
+
+  - provide copies of the Boson Higgs Audio 2 Community License and the Meta
+    Llama 3 Community License with the materials;
+  - prominently display, on a user interface, about page or documentation:
+
+      Built with Higgs Materials licensed from Boson AI USA, Inc., Copyright
+      Boson AI USA, Inc., All Rights Reserved and Meta Llama 3 licensed under
+      the Meta Llama 3 Community License, Copyright Meta Platforms, Inc., All
+      Rights Reserved.
+
+  - comply with the Llama 3 Acceptable Use Policy,
+    https://llama.meta.com/llama3/use-policy
+  - request an expanded licence from Boson AI USA, Inc. if the product has more
+    than 100,000 annual active users.
+
+Meta Llama 3 is licensed under the Meta Llama 3 Community License, Copyright (c) Meta Platforms, Inc. All Rights Reserved.
+Boson Higgs Audio 2 is licensed under the Boson Community License, Copyright (c) Boson AI USA, Inc. All Rights Reserved.

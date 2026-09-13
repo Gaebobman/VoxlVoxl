@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Pretendard v1.3.9 by Kil Hyung-jin — SIL Open Font License 1.1 (see
-  PRETENDARD_OFL.txt). Subset to Hangul syllables + Latin + common symbols;
+  licenses/OFL-1.1-pretendard.txt). Subset to Hangul syllables + Latin + common symbols;
   anything outside that falls back to the system face, which is the normal
   Android behaviour for a missing glyph.
 -->

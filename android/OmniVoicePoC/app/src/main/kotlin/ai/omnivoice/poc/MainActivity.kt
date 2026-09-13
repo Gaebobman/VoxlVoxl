@@ -68,7 +68,7 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private enum class Screen { FIRST_RUN, LIBRARY, ENROLL, VERIFY, COMPOSE, GENERATING, RESULT, DEV }
+    private enum class Screen { FIRST_RUN, LIBRARY, ENROLL, VERIFY, COMPOSE, GENERATING, RESULT, DEV, LICENSES }
 
     private lateinit var screens: FrameLayout
     private val views = HashMap<Screen, View>()
@@ -122,6 +122,7 @@ class MainActivity : AppCompatActivity() {
         views[Screen.GENERATING] = findViewById(R.id.screenGenerating)
         views[Screen.RESULT] = findViewById(R.id.screenResult)
         views[Screen.DEV] = findViewById(R.id.screenDev)
+        views[Screen.LICENSES] = findViewById(R.id.screenLicenses)
 
         profiles = FileVoiceProfileManager(File(filesDir, "voices"))
         wire()
@@ -208,7 +209,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun show(s: Screen, forward: Boolean = true) {
         val changed = s != current
-        if (s != Screen.DEV) previous = current
+        // both sit on top of whatever screen opened them, so neither becomes "previous"
+        if (s != Screen.DEV && s != Screen.LICENSES) previous = current
         current = s
         for ((k, v) in views) v.visibility = if (k == s) View.VISIBLE else View.GONE
         if (changed) views[s]?.enterScreen(forward)
@@ -217,6 +219,7 @@ class MainActivity : AppCompatActivity() {
     private fun goBack() {
         when (current) {
             Screen.DEV -> show(previous, forward = false)
+            Screen.LICENSES -> show(Screen.DEV, forward = false)
             Screen.ENROLL -> { cancelRecording(); show(Screen.LIBRARY, forward = false) }
             Screen.VERIFY -> show(Screen.ENROLL, forward = false)
             Screen.COMPOSE -> if (profileList.isEmpty()) show(Screen.LIBRARY, forward = false) else finish()
@@ -234,6 +237,8 @@ class MainActivity : AppCompatActivity() {
     private fun wire() {
         id<ImageButton>(R.id.openDev).setOnClickListener { show(Screen.DEV) }
         id<ImageButton>(R.id.composeDev).setOnClickListener { show(Screen.DEV) }
+        id<Button>(R.id.devLicenses).setOnClickListener { show(Screen.LICENSES) }
+        id<ImageButton>(R.id.licensesBack).setOnClickListener { goBack() }
         id<ImageButton>(R.id.devBack).setOnClickListener { show(previous) }
         id<ImageButton>(R.id.enrollBack).setOnClickListener { goBack() }
         id<ImageButton>(R.id.composeBack).setOnClickListener { goBack() }
@@ -1006,6 +1011,93 @@ class MainActivity : AppCompatActivity() {
             "등록 모델" to if (OmniVoiceEnroller.available(File(filesDir, "models"))) "있음" else "없음",
             "네트워크" to "권한 없음",
         )) info.addView(TableRow(this).apply { addView(cell(k, false)); addView(cell(v, true)) })
+        buildLicenses()
+    }
+
+    private class Notice(val name: String, val license: String, val use: String, val asset: String)
+
+    private val notices = listOf(
+        Notice("Higgs Audio V2 codec weights — Boson AI", "Boson Higgs Audio 2 Community License",
+            "waveform ↔ RVQ codes: the encoders used for enrollment and the decoder",
+            "licenses/Boson-Higgs-Audio-2-Community-License.txt"),
+        Notice("Meta Llama 3", "Meta Llama 3 Community License",
+            "the licence the Higgs materials are based on",
+            "licenses/Meta-Llama-3-Community-License.txt"),
+        Notice("OmniVoice — k2-fsa", "Apache License 2.0",
+            "backbone weights, tokenizer, and Kotlin ports of duration estimation, the unmasking " +
+                "schedule and loop, and text and audio post-processing",
+            "licenses/APACHE-2.0.txt"),
+        Notice("OmniVoice-Onnx — onnx-community", "Apache License 2.0",
+            "codec ONNX graphs", "licenses/APACHE-2.0.txt"),
+        Notice("ONNX Runtime — Microsoft", "MIT License", "on-device inference",
+            "licenses/MIT-onnxruntime.txt"),
+        Notice("ONNX Runtime third-party components", "various — see full text",
+            "libraries compiled into ONNX Runtime", "licenses/onnxruntime-ThirdPartyNotices.txt"),
+        Notice("pydub — James Robert", "MIT License", "silence removal, ported to Kotlin",
+            "licenses/MIT-pydub.txt"),
+        Notice("Pretendard — Kil Hyung-jin", "SIL Open Font License 1.1", "UI typeface",
+            "licenses/OFL-1.1-pretendard.txt"),
+        Notice("AndroidX · Kotlin · kotlinx.coroutines · Guava ListenableFuture", "Apache License 2.0",
+            "app framework", "licenses/APACHE-2.0.txt"),
+        Notice("VoxlVoxl", "Apache License 2.0", "this app — NOTICE", "licenses/NOTICE.txt"),
+    )
+
+    /**
+     * One card per component; the full licence text is read from assets only
+     * when a card is opened, since ONNX Runtime's third-party notices alone are
+     * hundreds of kilobytes.
+     */
+    private fun buildLicenses() {
+        val list = id<LinearLayout>(R.id.licensesList)
+        list.removeAllViews()
+        val dp = resources.displayMetrics.density
+        for (n in notices) {
+            val full = TextView(this).apply {
+                setTextAppearance(R.style.Voxl_Caption)
+                typeface = android.graphics.Typeface.MONOSPACE
+                textSize = 10f
+                visibility = View.GONE
+                setPadding(0, (12 * dp).toInt(), 0, 0)
+            }
+            list.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = getDrawable(R.drawable.glass_card)
+                isClickable = true
+                setPadding((16 * dp).toInt(), (14 * dp).toInt(), (16 * dp).toInt(), (14 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { bottomMargin = (8 * dp).toInt() }
+                addView(TextView(this@MainActivity).apply {
+                    text = n.name
+                    setTextAppearance(R.style.Voxl_Readout_Value)
+                    textSize = 14f
+                })
+                addView(TextView(this@MainActivity).apply {
+                    text = n.license
+                    setTextAppearance(R.style.Voxl_Tag)
+                    setPadding(0, (4 * dp).toInt(), 0, 0)
+                })
+                addView(TextView(this@MainActivity).apply {
+                    text = n.use
+                    setTextAppearance(R.style.Voxl_Caption)
+                    setPadding(0, (4 * dp).toInt(), 0, 0)
+                })
+                addView(full)
+                setOnClickListener {
+                    if (full.visibility == View.VISIBLE) {
+                        full.visibility = View.GONE
+                        return@setOnClickListener
+                    }
+                    if (full.text.isNullOrEmpty()) {
+                        full.text = runCatching {
+                            assets.open(n.asset).bufferedReader().use { it.readText() }
+                        }.getOrElse { "(${n.asset} is missing from this build)" }
+                    }
+                    full.visibility = View.VISIBLE
+                }
+            })
+        }
+        list.pressableTree()
     }
 
     private fun segment(label: String, sub: String, active: Boolean, onClick: () -> Unit) =

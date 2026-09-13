@@ -331,6 +331,14 @@ sample/                reference.wav / reference.txt / target.txt
 
 ## Licences
 
+**This repository's code is licensed under the [Apache License 2.0](LICENSE)**; see
+[`NOTICE`](NOTICE) for the code ported from OmniVoice and pydub and for every third-party
+licence that applies. The app shows the same notices under **개발자 설정 → 오픈소스 라이선스**,
+with full texts bundled in `android/OmniVoicePoC/app/src/main/assets/licenses/`.
+
+The Apache licence covers this repository only. The model weights are not in the repository
+and keep their own licences:
+
 OmniVoice code and weights, the ONNX conversions we reuse, and sherpa-onnx are Apache-2.0;
 ONNX Runtime is MIT.
 

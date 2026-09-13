@@ -126,6 +126,16 @@ def main() -> None:
         files[name] = {"bytes": size, "sha256": sha256(dst)}
         print(f"  {size / 1e6:9.1f} MB  {name}")
 
+    # The Boson Higgs Audio 2 licence requires copies of itself and of the Llama 3
+    # licence, and a Notice file, to travel with the codec weights.
+    lic_src = MODELS.parent / "android" / "OmniVoicePoC" / "app" / "src" / "main" / "assets" / "licenses"
+    lic_dst = dest / "licenses"
+    lic_dst.mkdir(exist_ok=True)
+    for name in ("Boson-Higgs-Audio-2-Community-License.txt",
+                 "Meta-Llama-3-Community-License.txt", "NOTICE.txt"):
+        shutil.copy2(lic_src / name, lic_dst / name)
+    print(f"  licences   -> {lic_dst}")
+
     variant = (MODELS / "onnx" / "int4" / "quant_variant.txt")
     manifest = {
         "schema": 1,

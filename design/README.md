@@ -34,4 +34,4 @@ Every non-obvious choice here came out of a measurement, not a preference:
 ## Licences
 
 Pretendard v1.3.9 © Kil Hyung-jin, SIL Open Font License 1.1 — see
-`android/OmniVoicePoC/app/src/main/assets/PRETENDARD_OFL.txt`.
+`android/OmniVoicePoC/app/src/main/assets/licenses/OFL-1.1-pretendard.txt`.
