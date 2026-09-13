@@ -25,9 +25,8 @@ enum class Backend { CPU, XNNPACK, NNAPI, QNN }
  * Owns the ONNX Runtime environment and the sessions.
  *
  * The backbone takes a 4-D bidirectional attention mask, so unlike a normal LLM
- * there is no KV cache to manage and the sequence length is constant within one
- * utterance — which is why the input tensors are allocated once per utterance
- * and rewritten in place across the 32 decoding steps.
+ * nothing in the generated region can be cached. The prefix is the exception —
+ * see [prefill] — when the graph was exported with `past_key`/`past_value` I/O.
  */
 class OnnxModelRunner(
     private val modelDir: File,
@@ -167,56 +166,167 @@ class OnnxModelRunner(
      */
     fun forward(inputIds: Array<LongArray>, audioMask: BooleanArray): FloatArray {
         val s = audioMask.size
-        val idsBuf = ByteBuffer.allocateDirect(OV.NUM_CODEBOOKS * s * 8)
-            .order(ByteOrder.nativeOrder()).asLongBuffer()
-        for (c in 0 until OV.NUM_CODEBOOKS) idsBuf.put(inputIds[c], 0, s)
-        idsBuf.rewind()
+        val feeds = inputs(inputIds, 0, s, audioMask, past = 0, pos0 = 0)
+        // A KV-capable backbone still serves plain calls -- the unconditional
+        // branch has no prefix to cache -- with an empty past.
+        val empty = if (hasKvCache) pastTensor(emptyFloats(), 0) else null
+        try {
+            return runLogits(
+                if (empty == null) feeds
+                else feeds + mapOf("past_key" to empty, "past_value" to empty), s)
+        } finally {
+            feeds.values.forEach { it.close() }
+            empty?.close()
+        }
+    }
 
-        val amBuf = boolBuffer(s)
-        for (i in 0 until s) amBuf.put(if (audioMask[i]) 1 else 0)
-        amBuf.rewind()
+    // ── approximate prefix KV cache ───────────────────────────────────────
+    //
+    // The prefix -- style tokens, both transcripts, the reference codes -- is
+    // identical on every un-masking step, yet the plain graph re-encodes it on
+    // every forward. A backbone exported with `past_key`/`past_value` I/O
+    // encodes it once and runs later forwards over the generated positions
+    // only. Measured on device: 1.93x on a short sentence, 1.30x on a long
+    // one; the gain tracks the prefix share. research-notes.md §7.1.
 
-        val attnBuf = boolBuffer(s * s)
-        val ones = ByteArray(s) { 1 }
-        for (i in 0 until s) attnBuf.put(ones)
-        attnBuf.rewind()
+    /** True when the backbone was exported with `export_onnx.py --kv-cache`. */
+    val hasKvCache: Boolean by lazy { lm.inputInfo.containsKey("past_key") }
 
-        val posBuf = ByteBuffer.allocateDirect(s * 8)
-            .order(ByteOrder.nativeOrder()).asLongBuffer()
-        for (i in 0 until s) posBuf.put(i.toLong())
-        posBuf.rewind()
+    /** `[layers, batch, kv_heads, past, head_dim]`, with -1 for the dynamic axes. */
+    private val kvShape: LongArray by lazy {
+        (lm.inputInfo.getValue("past_key").info as ai.onnxruntime.TensorInfo).shape
+    }
 
-        val tIds = OnnxTensor.createTensor(env, idsBuf, longArrayOf(1, OV.NUM_CODEBOOKS.toLong(), s.toLong()))
-        val tAm = OnnxTensor.createTensor(env, amBuf, longArrayOf(1, s.toLong()), ai.onnxruntime.OnnxJavaType.BOOL)
-        val tAttn = OnnxTensor.createTensor(env, attnBuf, longArrayOf(1, 1, s.toLong(), s.toLong()), ai.onnxruntime.OnnxJavaType.BOOL)
-        val tPos = OnnxTensor.createTensor(env, posBuf, longArrayOf(1, s.toLong()))
+    private var pastK: OnnxTensor? = null
+    private var pastV: OnnxTensor? = null
 
+    private fun emptyFloats() =
+        ByteBuffer.allocateDirect(0).order(ByteOrder.nativeOrder()).asFloatBuffer()
+
+    private fun pastTensor(data: java.nio.FloatBuffer, len: Int): OnnxTensor =
+        OnnxTensor.createTensor(env, data,
+            longArrayOf(kvShape[0], 1, kvShape[2], len.toLong(), kvShape[4]))
+
+    /**
+     * A full conditional forward that also keeps the prefix's K/V. Returns the
+     * same `[8][S]` logits as [forward]; call it on the first step.
+     */
+    fun prefill(inputIds: Array<LongArray>, audioMask: BooleanArray, prefixLen: Int): FloatArray {
+        check(hasKvCache) { "prefill needs a backbone exported with --kv-cache" }
+        clearCache()
+        val s = audioMask.size
+        val feeds = inputs(inputIds, 0, s, audioMask, past = 0, pos0 = 0)
+        val empty = pastTensor(emptyFloats(), 0)
         try {
             val t0 = System.nanoTime()
-            val out = lm.run(
-                mapOf(
-                    "input_ids" to tIds,
-                    "audio_mask" to tAm,
-                    "attention_mask" to tAttn,
-                    "position_ids" to tPos,
-                )
-            )
-            try {
-                val logits = (out[0] as OnnxTensor).floatBuffer
-                val result = FloatArray(logits.remaining())
-                logits.get(result)
+            lm.run(feeds + mapOf("past_key" to empty, "past_value" to empty)).use { out ->
+                val fb = (out[0] as OnnxTensor).floatBuffer
+                val logits = FloatArray(fb.remaining()); fb.get(logits)
+                pastK = slicePrefix(out.get("present_key").get() as OnnxTensor, s, prefixLen)
+                pastV = slicePrefix(out.get("present_value").get() as OnnxTensor, s, prefixLen)
+                lmComputeNanos += System.nanoTime() - t0
+                lmCalls++
+                return logits
+            }
+        } catch (e: OutOfMemoryError) {
+            throw OmniVoiceException(OmniVoiceException.Kind.OUT_OF_MEMORY, "OOM in backbone prefill (S=$s)")
+        } catch (e: OrtException) {
+            throw OmniVoiceException(OmniVoiceException.Kind.GENERATION_FAILED, "backbone prefill failed (S=$s)", e)
+        } finally {
+            feeds.values.forEach { it.close() }
+            empty.close()
+        }
+    }
+
+    /**
+     * A conditional forward over the generated positions `[genStart, S)` only,
+     * attending over the cached prefix. Returns `[8][T]` logits.
+     */
+    fun forwardCached(inputIds: Array<LongArray>, audioMask: BooleanArray, genStart: Int): FloatArray {
+        val k = checkNotNull(pastK) { "forwardCached before prefill" }
+        val v = checkNotNull(pastV)
+        val q = audioMask.size - genStart
+        val feeds = inputs(inputIds, genStart, q, audioMask, past = genStart, pos0 = genStart)
+        try {
+            return runLogits(feeds + mapOf("past_key" to k, "past_value" to v), q)
+        } finally {
+            feeds.values.forEach { it.close() }
+        }
+    }
+
+    /** The cache is ~27 MB per tensor on a typical prompt; free it between chunks. */
+    fun clearCache() {
+        pastK?.close(); pastV?.close()
+        pastK = null; pastV = null
+    }
+
+    private fun slicePrefix(present: OnnxTensor, s: Int, keep: Int): OnnxTensor {
+        val lh = (kvShape[0] * kvShape[2]).toInt()
+        val block = s * kvShape[4].toInt()
+        val k = keep * kvShape[4].toInt()
+        val src = present.floatBuffer
+        val dst = ByteBuffer.allocateDirect(lh * k * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        val row = FloatArray(k)
+        for (i in 0 until lh) {
+            src.position(i * block); src.get(row, 0, k); dst.put(row)
+        }
+        dst.rewind()
+        return pastTensor(dst, keep)
+    }
+
+    /** The four backbone inputs for positions `[from, from+q)` attending over `past + q` keys. */
+    private fun inputs(
+        inputIds: Array<LongArray>, from: Int, q: Int, audioMask: BooleanArray,
+        past: Int, pos0: Int,
+    ): Map<String, OnnxTensor> {
+        val idsBuf = ByteBuffer.allocateDirect(OV.NUM_CODEBOOKS * q * 8)
+            .order(ByteOrder.nativeOrder()).asLongBuffer()
+        for (c in 0 until OV.NUM_CODEBOOKS) idsBuf.put(inputIds[c], from, q)
+        idsBuf.rewind()
+
+        val amBuf = boolBuffer(q)
+        for (i in 0 until q) amBuf.put(if (audioMask[from + i]) 1 else 0)
+        amBuf.rewind()
+
+        // bidirectional: every query attends to every key, cached or fresh
+        val kv = past + q
+        val attnBuf = boolBuffer(q * kv)
+        val ones = ByteArray(kv) { 1 }
+        for (i in 0 until q) attnBuf.put(ones)
+        attnBuf.rewind()
+
+        val posBuf = ByteBuffer.allocateDirect(q * 8)
+            .order(ByteOrder.nativeOrder()).asLongBuffer()
+        for (i in 0 until q) posBuf.put((pos0 + i).toLong())
+        posBuf.rewind()
+
+        return mapOf(
+            "input_ids" to OnnxTensor.createTensor(env, idsBuf,
+                longArrayOf(1, OV.NUM_CODEBOOKS.toLong(), q.toLong())),
+            "audio_mask" to OnnxTensor.createTensor(env, amBuf,
+                longArrayOf(1, q.toLong()), ai.onnxruntime.OnnxJavaType.BOOL),
+            "attention_mask" to OnnxTensor.createTensor(env, attnBuf,
+                longArrayOf(1, 1, q.toLong(), kv.toLong()), ai.onnxruntime.OnnxJavaType.BOOL),
+            "position_ids" to OnnxTensor.createTensor(env, posBuf, longArrayOf(1, q.toLong())),
+        )
+    }
+
+    private fun runLogits(feeds: Map<String, OnnxTensor>, rows: Int): FloatArray {
+        try {
+            val t0 = System.nanoTime()
+            // Only the logits: a KV-capable graph also offers present_key/value,
+            // and materialising those on every step would copy the whole cache out.
+            lm.run(feeds, setOf("logits")).use { out ->
+                val fb = (out[0] as OnnxTensor).floatBuffer
+                val result = FloatArray(fb.remaining()); fb.get(result)
                 lmComputeNanos += System.nanoTime() - t0
                 lmCalls++
                 return result
-            } finally {
-                out.close()
             }
         } catch (e: OutOfMemoryError) {
-            throw OmniVoiceException(OmniVoiceException.Kind.OUT_OF_MEMORY, "OOM in backbone forward (S=$s)")
+            throw OmniVoiceException(OmniVoiceException.Kind.OUT_OF_MEMORY, "OOM in backbone forward (rows=$rows)")
         } catch (e: OrtException) {
-            throw OmniVoiceException(OmniVoiceException.Kind.GENERATION_FAILED, "backbone forward failed (S=$s)", e)
-        } finally {
-            tIds.close(); tAm.close(); tAttn.close(); tPos.close()
+            throw OmniVoiceException(OmniVoiceException.Kind.GENERATION_FAILED, "backbone forward failed (rows=$rows)", e)
         }
     }
 
@@ -334,6 +444,7 @@ class OnnxModelRunner(
         if (profileDir == null) null else runCatching { lm.endProfiling() }.getOrNull()
 
     override fun close() {
+        clearCache()
         runCatching { lm.close() }
         runCatching { vocoder.close() }
     }

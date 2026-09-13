@@ -451,6 +451,38 @@ copy of the weights in memory.
 The desktop could not have answered this. It has AVX2 without VNNI, so its
 int8-compute path behaves nothing like the phone's `i8mm`; on the desktop,
 level 4 even ran slower than level 1 on the long case.
+
+**Quality on the configuration that would ship** — level-4 KV graph, cache built
+once and never refreshed, three seeds, re-masking NLL against the fp32 scorer:
+
+| | seed 1234 | seed 7 | seed 99 | mean |
+|---|---:|---:|---:|---:|
+| plain, fp32 compute (level 1) | 2.8722 | 2.9477 | 3.1080 | 2.976 |
+| plain, int8 compute (level 4) | 3.0443 | 2.9853 | 2.9833 | 3.004 |
+| **KV cache, level 4, never refreshed** | 2.8662 | 2.9439 | **2.8448** | **2.885** |
+
+All three sit inside each other's seed spread and under the noise floor. The
+approximation that bidirectional attention forces on a cached prefix costs
+nothing this judge can see.
+
+**Through the engine**, the code path the app runs (`OmniVoiceEngine` detects the
+`past_key` input, prefills on its first executed step, then runs cached
+forwards), `DeviceBenchmark#t04_generate`, 10 runs alternating the plain and KV
+graph files, same sentence, S = 242 with a 62 % prefix:
+
+| | gen ms, each run | median |
+|---|---|---:|
+| plain, level 4 | 9 444 · 16 164 · 16 007 · 9 173 · 11 537 | 11 537 |
+| **KV cache, level 4** | 7 831 · 7 310 · 9 469 · 5 940 · 5 642 | **7 310** |
+
+Median of adjacent-pair ratios **1.69×**, best against best 1.63×. That lands
+between the lever's 1.30× (40 % prefix) and 1.93× (74 %), as the fixed-prefix
+account predicts. Sequential runs remain noisy — the plain graph took 9.2 s in
+one run and 16.2 s in another — which is why the in-process lever above is the
+number to quote per forward, and this table only confirms the port.
+
+Cost: peak PSS **771–794 MB → 892–931 MB**, about +130 MB, for the cached
+prefix K/V and the copy made while slicing it out of the prefill.
 `models/onnx/int4_kv/omnivoice_lm_kv.onnx` carries `past_key`/`past_value` in and
 `present_key`/`present_value` out (28 layers × 8 heads × 128), opset 20, sharing
 the same 422 MB weight blob. `scripts/kvcache_probe.py` has the harness
@@ -594,6 +626,7 @@ there is no wheel.
 | 6 intra-op threads, not 8 | 1.5× |
 | CPU EP over XNNPACK / NNAPI | 1.13× / 1.17× |
 | **int8 compute (`accuracy_level=4`) + ORT 1.29** | **2.3×** |
+| **prefix KV cache** | **1.3–1.9×**, tracking the prefix share |
 | offline-optimized graph | load 1.47× |
 | voice-prompt cache | the ~3 s encode happens once per voice |
 | chunked long text | prefix paid once for many sentences |
@@ -616,7 +649,7 @@ there is no wheel.
 
 | | expected | effort |
 |---|---|---|
-| prefix KV cache | 1.5–2× | export (already built, unmeasured) |
+| ~~prefix KV cache~~ | **shipped — 1.3–1.9×, see §7.1** | |
 | layer-wise step budget | 1.3–1.8× | loop — **needs a WER gate first** |
 | CFG on a subset of steps | 1.1–1.2× | loop |
 | fuse `gate_proj`+`up_proj`; slice before the head | ~1.05× | export |

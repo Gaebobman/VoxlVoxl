@@ -201,7 +201,8 @@ class OmniVoiceEngine(
         val audioMask = BooleanArray(s) { it >= nText }
 
         Log.i(TAG, "chunk $chunk/$totalChunks: S=$s (text $nText + ref $tRef + gen $tGen), " +
-            "steps=${cfg.numStep}, guidance=${cfg.guidanceScale}, lang=${language ?: "None"}")
+            "steps=${cfg.numStep}, guidance=${cfg.guidanceScale}, lang=${language ?: "None"}, " +
+            "kv_cache=${runner.hasKvCache}")
 
         val uIds = Array(OV.NUM_CODEBOOKS) { c -> inputIds[c].copyOfRange(genStart, s) }
         val uMask = BooleanArray(tGen) { true }
@@ -216,6 +217,12 @@ class OmniVoiceEngine(
         val pred = IntArray(OV.NUM_CODEBOOKS * tGen)
         val scores = FloatArray(OV.NUM_CODEBOOKS * tGen)
 
+        // The prefix is identical on every step, so a KV-capable backbone encodes
+        // it once and later conditional forwards run over the generated rows only.
+        // The unconditional branch has no prefix and is unchanged.
+        val kvCache = runner.hasKvCache
+        var cacheBuilt = false
+
         for (step in schedule.indices) {
             // Cancellation is checked between steps rather than inside them: one
             // step is 0.5-2 s, which is a responsive enough granularity, and the
@@ -224,25 +231,31 @@ class OmniVoiceEngine(
             val k = schedule[step]
             if (k <= 0) continue
 
-            val fuse = fuseCfg && cfg.guidanceScale != 0.0f
+            val fuse = fuseCfg && !kvCache && cfg.guidanceScale != 0.0f
             val cLogits: FloatArray
             val uLogits: FloatArray?
+            var cached = false
             if (fuse) {
                 cLogits = runner.forwardFused(inputIds, audioMask, genStart)
                 uLogits = cLogits
             } else {
-                cLogits = runner.forward(inputIds, audioMask)
+                cLogits = when {
+                    !kvCache -> runner.forward(inputIds, audioMask)
+                    !cacheBuilt -> runner.prefill(inputIds, audioMask, genStart).also { cacheBuilt = true }
+                    else -> { cached = true; runner.forwardCached(inputIds, audioMask, genStart) }
+                }
                 uLogits = if (cfg.guidanceScale != 0.0f) runner.forward(uIds, uMask) else null
             }
-            // row stride and the unconditional branch's first row differ between
-            // the fused layout ([8][S+T]) and the split one ([8][S] + [8][T])
-            val cStride = if (fuse) s + tGen else s
+            // row stride and first row differ between the plain layout ([8][S]),
+            // the cached one ([8][T]) and the fused one ([8][S+T])
+            val cStride = when { fuse -> s + tGen; cached -> tGen; else -> s }
+            val cBase = if (cached) 0 else genStart
             val uStride = if (fuse) s + tGen else tGen
             val uBase = if (fuse) s else 0
 
             for (c in 0 until OV.NUM_CODEBOOKS) {
                 for (t in 0 until tGen) {
-                    val cOff = ((c * cStride) + genStart + t) * v
+                    val cOff = ((c * cStride) + cBase + t) * v
                     val dst = ((c * tGen) + t) * v
                     logSoftmaxInto(cLogits, cOff, logProbs, dst, v)
                     if (uLogits != null) {
@@ -302,6 +315,7 @@ class OmniVoiceEngine(
             }
         }
         if (leftover > 0) Log.w(TAG, "$leftover cells still masked after the loop; clamped to 0")
+        runner.clearCache()
         return tokens
     }
 

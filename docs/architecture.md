@@ -38,7 +38,7 @@ flowchart TB
         TOPK -->|"next step"| U
     end
 
-    LOOP -.->|"each forward"| LM["omnivoice_lm.onnx<br/>int4, accuracy_level 4"]
+    LOOP -.->|"each forward"| LM["omnivoice_lm.onnx<br/>int4 · accuracy_level 4 · prefix KV cache"]
     LOOP -->|"codes (8, T_gen)"| DEC["higgs_decoder.onnx"]
     DEC -->|"24 kHz f32"| POST["silence-trim → re-gain → fade/pad"]
     POST --> OUT["AudioTrack / WAV"]
@@ -47,10 +47,14 @@ flowchart TB
     style OUT fill:#3a2a10,stroke:#eda13f,color:#f6f1ea
 ```
 
-Both branches of the CFG mix are full forwards over the whole sequence, and
-there are two of them per step, because the backbone's attention is
-bidirectional and no KV cache is possible. That loop is the entire cost of the
-system — see [`research-notes.md`](research-notes.md) §2.
+Because the backbone's attention is bidirectional, nothing in the generated
+region can be cached: every step re-reads it, twice, once per CFG branch. The
+one exception is the prefix — style tokens, both transcripts, the reference
+codes — which never changes between steps. Step 1's conditional forward
+encodes it and keeps its K/V; every later conditional forward runs over the
+generated positions only. The unconditional branch has no prefix and is
+unchanged. That loop is the entire cost of the system — see
+[`research-notes.md`](research-notes.md) §2 and §7.1.
 
 ## Stack
 

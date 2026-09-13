@@ -226,6 +226,7 @@ that "should" help.
 | technique | effect | why |
 |---|---|---|
 | **int8 compute (`accuracy_level=4`) + ORT 1.29** | **2.3x** | the shipping graph asked for fp32 compute, so ARM64's int4 kernels could never dispatch — see below |
+| **prefix KV cache** | **1.3–1.9x** — 1.93x at a 74 % prefix, 1.30x at 40 % | the reference prefix never changes between steps, so it is encoded once and every later forward runs over the generated positions only; costs ~130 MB peak PSS |
 | int4 weight-only, block 32, audio head kept fp32 | 2.45 GB → **422 MB**, ~5.8x less to read per step | the graph is 85 % `MatMulNBits`; memory bandwidth is the wall |
 | `num_step` 32 → **16** | **2.2x** (RTF 24.6 → 11.3) | 16 keeps the judge score; the upstream default of 32 buys nothing measurable here |
 | 6 intra-op threads, not 8 | **1.5x** vs 8 threads | see above — the prime cores hurt |
@@ -266,7 +267,7 @@ alone 1.25x. Full working in [`docs/research-notes.md`](docs/research-notes.md) 
   model with no `MatMulNBits` path, and our QDQ a16w8 attempt measured NLL 3.331, past the
   noise floor, at 1209 ms against 766 ms on CPU. §7.7.
 
-**Identified, quantified, not yet taken:** the approximate **prefix KV cache**. Bidirectional
+**Taken since:** the approximate **prefix KV cache** — see the table above and [`docs/research-notes.md`](docs/research-notes.md) §7.1. The reasoning that priced it: Bidirectional
 attention forbids a cache across the generated region — that is §1.1's central finding — but
 the reference prefix does not change from step to step, and at S = 188 it is 140 tokens,
 **74 % of the sequence**, re-encoded every time. Trimming the reference prices that directly:
