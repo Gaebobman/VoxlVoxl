@@ -537,6 +537,7 @@ class DeviceBenchmark {
         when (lever) {
             "fusion" -> leverFusion(env, lmFile, threads, reps, p)
             "kvcache" -> leverKvCache(env, threads, reps, p)
+            "qnn" -> leverQnn(env, threads, reps, p)
             "sessopts" -> leverSessOpts(env, lmFile, threads, reps, p)
             "models" -> leverModels(env, threads, reps, p)
             "optmodel" -> leverOptModel(env, lmFile, threads, reps, p)
@@ -686,6 +687,142 @@ class DeviceBenchmark {
         } finally {
             owned.forEach { it.close() }
             plain.close(); kv.close()
+        }
+    }
+
+    /**
+     * The Hexagon NPU through QNN, against the CPU path that ships.
+     *
+     * Needs the static-shape QDQ graph from scripts/export_qnn.py (S = 188). The
+     * first session compiles that graph for HTP -- measured 33.9 s -- and, with
+     * `ep.context_enable`, writes a QNN context binary; later sessions load the
+     * binary instead. The CPU side is the shipping KV graph: full forward
+     * (prefill), cached forward, and the unconditional branch. The unconditional
+     * branch (T = 48) has no static NPU graph here, so the NPU estimate keeps it
+     * on CPU. Round-robin with the order alternated, as every lever here.
+     */
+    private fun leverQnn(
+        env: ai.onnxruntime.OrtEnvironment, threads: Int, reps: Int, p: Prompt,
+    ) {
+        check(p.s == 188) { "the static QNN graph is S=188; this prompt is S=${p.s}" }
+        val qdq = File(modelDir, arg("qnnmodel", "qnn/omnivoice_lm_s188.onnx"))
+        val ctx = File(qdq.parentFile, qdq.nameWithoutExtension + "_ctx.onnx")
+        fun qnn(so: ai.onnxruntime.OrtSession.SessionOptions) =
+            so.also { it.addQnn(mapOf("backend_path" to "libQnnHtp.so")) }
+
+        if (!ctx.isFile || arg("recompile", "false").toBoolean()) {
+            ctx.parentFile?.listFiles()?.filter { it.name.startsWith(ctx.nameWithoutExtension) }
+                ?.forEach { it.delete() }
+            val so = qnn(sessionOptions(threads))
+            so.addConfigEntry("ep.context_enable", "1")
+            so.addConfigEntry("ep.context_file_path", ctx.absolutePath)
+            so.addConfigEntry("ep.context_embed_mode", "0")
+            val t0 = System.nanoTime()
+            env.createSession(qdq.absolutePath, so).close()
+            val written = ctx.parentFile?.listFiles()
+                ?.filter { it.name.startsWith(ctx.nameWithoutExtension) } ?: emptyList()
+            bench("lever_qnn_compile", "compile_ms=${(System.nanoTime() - t0) / 1_000_000} " +
+                "files=${written.map { it.name + ":" + it.length() }}")
+        }
+        val fromCtx = ctx.isFile
+        val tl = System.nanoTime()
+        val npu = env.createSession((if (fromCtx) ctx else qdq).absolutePath, qnn(sessionOptions(threads)))
+        bench("lever_qnn_load", "from=${if (fromCtx) "context_binary" else "qdq_graph"} " +
+            "load_ms=${(System.nanoTime() - tl) / 1_000_000}")
+        val kv = env.createSession(
+            File(modelDir, arg("kvmodel", "omnivoice_lm.onnx")).absolutePath, sessionOptions(threads))
+
+        val layers = 28; val heads = 8; val dim = 128
+        val owned = ArrayList<ai.onnxruntime.OnnxTensor>()
+        fun floatTensor(v: FloatArray, shape: LongArray) =
+            ai.onnxruntime.OnnxTensor.createTensor(env,
+                java.nio.ByteBuffer.allocateDirect(v.size * 4)
+                    .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+                    .put(v).also { it.rewind() }, shape).also { owned.add(it) }
+        try {
+            val pLen = p.genStart; val t = p.tGen; val s = p.s
+            val emptyShape = longArrayOf(layers.toLong(), 1, heads.toLong(), 0, dim.toLong())
+            val emptyK = floatTensor(FloatArray(0), emptyShape)
+            val emptyV = floatTensor(FloatArray(0), emptyShape)
+            val (fc, fu) = splitFeeds(env, p)
+            val prefill = fc + mapOf("past_key" to emptyK, "past_value" to emptyV)
+            val kvUncond = fu + mapOf("past_key" to emptyK, "past_value" to emptyV)
+            val block = s * dim; val keep = pLen * dim
+            val (cpuLogits, pastK, pastV) = kv.run(prefill).use { out ->
+                fun sliced(name: String): FloatArray {
+                    val fb = (out.get(name).get() as ai.onnxruntime.OnnxTensor).floatBuffer
+                    val full = FloatArray(fb.remaining()); fb.get(full)
+                    val r = FloatArray(layers * heads * keep)
+                    for (lh in 0 until layers * heads) System.arraycopy(full, lh * block, r, lh * keep, keep)
+                    return r
+                }
+                val lfb = (out[0] as ai.onnxruntime.OnnxTensor).floatBuffer
+                val lg = FloatArray(lfb.remaining()); lfb.get(lg)
+                Triple(lg, sliced("present_key"), sliced("present_value"))
+            }
+            val pastShape = longArrayOf(layers.toLong(), 1, heads.toLong(), pLen.toLong(), dim.toLong())
+            val genIds = LongArray(OV.NUM_CODEBOOKS * t)
+            for (c in 0 until OV.NUM_CODEBOOKS) System.arraycopy(p.ids[c], pLen, genIds, c * t, t)
+            val cached = mapOf(
+                "input_ids" to longTensor(env, genIds, longArrayOf(1, OV.NUM_CODEBOOKS.toLong(), t.toLong())),
+                "audio_mask" to boolTensor(env, ByteArray(t) { 1 }, longArrayOf(1, t.toLong())),
+                "attention_mask" to boolTensor(env, ByteArray(t * (pLen + t)) { 1 },
+                    longArrayOf(1, 1, t.toLong(), (pLen + t).toLong())),
+                "position_ids" to longTensor(env, LongArray(t) { (pLen + it).toLong() }, longArrayOf(1, t.toLong())),
+                "past_key" to floatTensor(pastK, pastShape),
+                "past_value" to floatTensor(pastV, pastShape),
+            )
+
+            // how far the a16w8 NPU graph is from the int4 CPU graph, on one forward
+            val t0 = System.nanoTime()
+            val npuLogits = runOnce(npu, fc).second
+            val firstRunMs = (System.nanoTime() - t0) / 1_000_000
+            val v = OV.AUDIO_VOCAB_SIZE
+            var mx = 0f; var agree = 0
+            for (c in 0 until OV.NUM_CODEBOOKS) for (i in 0 until t) {
+                val o0 = ((c * s) + pLen + i) * v
+                var ba = 0; var bb = 0
+                var va = Float.NEGATIVE_INFINITY; var vb = Float.NEGATIVE_INFINITY
+                for (k in 0 until v) {
+                    val a = cpuLogits[o0 + k]; val b = npuLogits[o0 + k]
+                    val d = Math.abs(a - b); if (d > mx) mx = d
+                    if (a > va) { va = a; ba = k }
+                    if (b > vb) { vb = b; bb = k }
+                }
+                if (ba == bb) agree++
+            }
+            bench("lever_qnn_agreement", "first_npu_run_ms=$firstRunMs cells=${OV.NUM_CODEBOOKS * t} " +
+                "argmax_vs_cpu=$agree max_abs=$mx")
+
+            runOnce(npu, fc); runOnce(kv, cached); runOnce(kv, kvUncond)   // warm
+            val nf = ArrayList<Long>(); val cf = ArrayList<Long>()
+            val cc = ArrayList<Long>(); val cu = ArrayList<Long>()
+            for (r in 0 until reps) {
+                fun npuRun() { nf.add(runOnce(npu, fc).first) }
+                fun cpuRun() {
+                    cf.add(runOnce(kv, prefill).first); cc.add(runOnce(kv, cached).first)
+                    cu.add(runOnce(kv, kvUncond).first)
+                }
+                if (r % 2 == 0) { npuRun(); cpuRun() } else { cpuRun(); npuRun() }
+                bench("lever_qnn_round", "r=$r npu_full=${nf.last()} cpu_full=${cf.last()} " +
+                    "cpu_cached=${cc.last()} cpu_uncond=${cu.last()} thermal=${thermal()}")
+            }
+            fun med(xs: List<Long>) = xs.sorted()[xs.size / 2].toDouble()
+            val steps = arg("steps", "16").toInt()
+            val mnf = med(nf); val mcf = med(cf); val mcc = med(cc); val mcu = med(cu)
+            val cpuShip = mcf + (steps - 1) * mcc + steps * mcu
+            val npuCond = steps * mnf + steps * mcu
+            bench("lever_qnn", "S=$s steps=$steps med_ms npu_full=$mnf cpu_full=$mcf " +
+                "cpu_cached=$mcc cpu_uncond=$mcu " +
+                "gen_ms cpu_kv_shipping=${"%.0f".format(cpuShip)} " +
+                "npu_cond_cpu_uncond=${"%.0f".format(npuCond)} " +
+                "npu_vs_cpu_full=${"%.3f".format(mcf / mnf)} " +
+                "npu_vs_shipping=${"%.3f".format(cpuShip / npuCond)}")
+            (fc.values + fu.values + cached.values).toSet()
+                .filter { it !in owned }.forEach { it.close() }
+        } finally {
+            owned.forEach { it.close() }
+            npu.close(); kv.close()
         }
     }
 

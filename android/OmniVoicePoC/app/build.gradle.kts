@@ -53,7 +53,10 @@ android {
     }
 
     packaging {
-        // ORT ships prebuilt .so; do not let the packer touch them
+        // ORT ships prebuilt .so; do not let the packer touch them. For the QNN
+        // build (onnxruntime-android-qnn) set this to true: the HTP skel is opened
+        // by path on the DSP side and cannot be read from inside the APK.
+        // docs/benchmark.md §7.7b.
         jniLibs { useLegacyPackaging = false }
     }
 }

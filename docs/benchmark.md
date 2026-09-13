@@ -417,7 +417,7 @@ Two consequences for the product:
    costs about 8 % more compute but bounds peak memory, so it is a memory guard
    rather than a speed feature.
 
-### 7.7 QNN / Hexagon — attempted, and blocked by the runtime, not by us
+### 7.7 QNN / Hexagon — first attempt (superseded by §7.7b)
 
 §7.5 listed what a QNN path needs. All of it was built, and it still does not run
 on this device. The reason is worth recording precisely.
@@ -502,6 +502,128 @@ for skels this chip cannot use, so the dependency is back to
 that artifact now fails with a named `MODEL_LOAD_FAILED` rather than silently
 falling back to CPU — which is precisely the trap that made the first NNAPI
 reading look like a success.
+
+### 7.7b QNN / Hexagon — unblocked, and the §7.7 root cause was incomplete
+
+§7.7 concluded the NPU was unreachable because ORT 1.22's QNN SDK shipped no
+V81 skel. Two things were wrong with that conclusion, found by retrying on
+`onnxruntime-android-qnn:1.29.0` (which pulls `com.qualcomm.qti:qnn-runtime:2.42.0`).
+
+**1. The newer runtime does ship the skel — and it still failed identically.**
+`qnn-runtime-2.42.0.aar` contains `libQnnHtpV81Skel.so` (17 MB) and
+`libQnnHtpV81Stub.so`, both packaged into the APK. The session still failed
+with the exact §7.7 error:
+
+```
+E  qnn_execution_provider.cc:1046 GetCapability] QNN SetupBackend failed
+   Failed to create device. Error: QNN_DEVICE_ERROR_INVALID_CONFIG: Invalid config values
+```
+
+So a missing skel was never the whole story.
+
+**2. The app could not reach the NPU at all, for two reasons of its own.**
+
+- *Native libraries were not extracted.* `jniLibs.useLegacyPackaging = false`
+  leaves every `.so` inside the APK (`extractNativeLibs=false`; the app's
+  `lib/arm64` directory on the device was empty). The app-side linker can load
+  from the zip, but the skel is opened by path on the DSP side. Fixed by
+  extracting; **on its own this did not change the error.**
+- *The FastRPC library was not declared.* The NPU is reached through the vendor
+  library `libcdsprpc.so`. The device lists it in
+  `/vendor/etc/public.libraries.txt`, but since Android 12 an app may only open a
+  vendor public library it declares with
+  `<uses-native-library android:name="libcdsprpc.so" android:required="false"/>`.
+  Our manifest had no such line. QNN's own error strings describe exactly this
+  failure — `fail to set platform variable(s) including sodId, socModel,
+  processorType, skelFilePath` — platform information it reads *through* that
+  channel. **Adding the declaration removed the error.**
+
+Whether ORT 1.22's V79-only SDK would also have worked with the declaration in
+place was not tested; the V81 runtime is what runs now.
+
+**First evidence it runs on the NPU** — ORT's profile of one forward, static
+S = 188, QDQ a16w8 graph:
+
+| | before the declaration | after |
+|---|---:|---:|
+| nodes on `QNNExecutionProvider` | 0 | **2** (the whole graph, compiled into two partitions) |
+| NPU share of kernel time | 0 % | **98.1 %** |
+| nodes on CPU | 6 492 | 5 (Quantize/Dequantize at the edges) |
+| one forward | 1 207 ms (QDQ on CPU) | **191 ms** |
+| session initialisation | 2.1 s | **33.9 s** (HTP graph compilation) |
+
+That single profiled forward is not a benchmark. The measurement is
+`DeviceBenchmark#t12_levers -e lever qnn`: the NPU session and the shipping
+CPU KV session held in one process, round-robin with the order alternated,
+7 rounds, medians, 6 threads, thermal 0.
+
+**Compilation is solved by the context binary.** `ep.context_enable` writes
+`omnivoice_lm_s188_ctx.onnx` (5 KB) and `omnivoice_lm_s188_ctx_qnn.bin`
+(**788 MB**):
+
+| | time |
+|---|---:|
+| first session, compiling the QDQ graph for HTP | 38 201 ms |
+| every later session, from the context binary | **859 ms** |
+
+**Timing, warm:**
+
+| forward | median | spread |
+|---|---:|---|
+| **NPU full, S = 188** | **183 ms** | 181–191 ms |
+| CPU full (prefill), S = 188 | 434 ms | 395–518 ms |
+| CPU cached conditional, 48 over 140 cached | 147 ms | |
+| CPU unconditional, T = 48 | 109 ms | |
+
+Forward for forward the NPU is **2.37×** faster than the CPU, and it barely
+moves — 10 ms of spread against the CPU's 120 ms, because HTP is not under the
+CPU governor.
+
+**Against the path that ships it is not faster.** 16 steps:
+
+| path | LM time |
+|---|---:|
+| CPU, prefix KV cache (shipping): prefill + 15 cached + 16 uncond | **4 383 ms** |
+| NPU conditional + CPU unconditional | 4 672 ms (**0.94×**) |
+
+The NPU graph has no KV cache, so every conditional step is a full 188-token
+forward (183 ms) where the CPU runs 48 tokens against its cache (147 ms). There
+is also no static T = 48 graph, so the unconditional branch stays on CPU.
+
+One caution on these CPU numbers: they are ~1.4× slower than the isolated KV
+lever measured the same morning (cached 99 ms, uncond 80 ms, prefill 285 ms),
+most likely because the NPU session and its 788 MB context were held alongside.
+The comparison within this run is fair; measured the isolated way, the CPU path
+is further ahead still (3 050 ms against 4 208 ms).
+
+**And quality is worse.** On the same forward, NPU (a16w8 QDQ) and CPU (int4)
+agree on the argmax of only **190 of 384** cells (max |Δ| 2.9) — consistent with
+§7.7's judge score of 3.331 for this graph, past the 3.12 noise floor.
+
+**Verdict.** QNN now runs on this device, compiles once into a context binary
+that loads in under a second, and is 2.37× faster per full forward. It still
+does not beat CPU + prefix KV cache, and its quantization costs quality. What
+could change that, in order of likely value:
+
+1. a static **KV-cached** QDQ graph (q = 48 over past 140) on the NPU, so the NPU
+   runs the same 48-token step the CPU does;
+2. a static T = 48 graph so the unconditional branch also moves to the NPU;
+3. quantization that survives activation outliers — per-channel weights, or
+   mixed precision keeping the sensitive layers in fp16 on HTP.
+
+**Build state.** The shipping build is back on `onnxruntime-android:1.29.0`
+(QNN libraries add ~120 MB to the APK for a path the app does not use). To
+retry, two lines in `app/build.gradle.kts`:
+
+```kotlin
+implementation("com.microsoft.onnxruntime:onnxruntime-android-qnn:1.29.0")
+jniLibs { useLegacyPackaging = true }   // the DSP loader opens the skel by path
+```
+
+The manifest keeps `<uses-native-library android:name="libcdsprpc.so"
+android:required="false"/>` — harmless without QNN, and the one line that
+actually unblocked it.
+
 
 ### 7.6 Thermal — sustained throughput is about half of cold
 

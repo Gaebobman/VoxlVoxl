@@ -27,6 +27,16 @@
         android:largeHeap="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.VoxlVoxl">
+        <!--
+          The QNN execution provider reaches the Hexagon NPU through FastRPC,
+          i.e. the vendor library libcdsprpc.so. Since Android 12 an app may only
+          open a vendor public library it declares here; without this the HTP
+          stub cannot reach the NPU and QnnDevice_create fails with
+          QNN_DEVICE_ERROR_INVALID_CONFIG. required=false keeps the app
+          installable on devices without it, where the CPU path is used.
+        -->
+        <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

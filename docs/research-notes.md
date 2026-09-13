@@ -399,17 +399,43 @@ the codec: `layer_penalty_factor = 5.0` subtracts 5 per codebook index from the
 selection score, so layer 0 un-masks first by construction. On device the ladder
 shows 83/56/27/10/3/2/1/0 percent filled at the same step.
 
-### 6.6 QNN / Hexagon
+### 6.6 QNN / Hexagon — runs now, and still does not win
 
-Attempted and blocked at the time by the runtime, not by us: ORT 1.22's bundled
-QNN SDK predates this SoC and ships V79 HTP skels against the device's **V81**.
-That specific blocker is gone in newer ORT.
+The first attempt blamed the runtime: ORT 1.22's QNN SDK shipped no V81 skel.
+That was incomplete. On `onnxruntime-android-qnn:1.29.0`, whose QNN runtime
+does contain `libQnnHtpV81Skel.so`, the session failed with the identical
+`QNN_DEVICE_ERROR_INVALID_CONFIG`. The app itself could not reach the NPU:
 
-The project is unchanged, though. The QNN EP still requires static shapes and a
-quantized (uint8/uint16) model with no int4 / `MatMulNBits` path on HTP, and our
-own QDQ a16w8 experiment measured **NLL 3.331** — past the noise floor — at
-1209 ms against 766 ms on CPU. Static bucketed shapes, a calibrated int8
-requantize, and context-binary caching: a project, not a flag.
+- native libraries were left inside the APK (`extractNativeLibs=false`), while
+  the skel is opened by path on the DSP side — fixed, but not sufficient;
+- the manifest did not declare `<uses-native-library android:name="libcdsprpc.so">`.
+  Since Android 12 that declaration is required to open a vendor public library,
+  and FastRPC through `libcdsprpc.so` is how the HTP stub reaches the NPU.
+  **Adding it removed the error.**
+
+With that, ORT's profile shows the whole graph compiled into 2 QNN partitions
+carrying 98.1 % of kernel time, 5 Quantize/Dequantize nodes left on CPU.
+
+Measured with the NPU and the shipping CPU session interleaved in one process:
+
+| | |
+|---|---:|
+| compile once / load from context binary (788 MB) | 38.2 s / **0.86 s** |
+| NPU full forward, S = 188 | **183 ms** (181–191) |
+| CPU full forward, same run | 434 ms |
+| CPU cached forward / uncond, same run | 147 ms / 109 ms |
+| 16-step LM time: CPU + KV cache vs NPU cond + CPU uncond | **4 383 ms vs 4 672 ms** |
+| argmax agreement, NPU a16w8 vs CPU int4 | 190 / 384 |
+
+**2.37× faster per full forward, 0.94× against the path that ships, and worse
+quality.** The NPU graph has no prefix KV cache, so it runs 188 tokens per step
+where the CPU runs 48 against its cache. The route to an NPU win is a static
+KV-cached QDQ graph, a static T = 48 graph for the unconditional branch, and a
+quantization that survives activation outliers — a project, now an unblocked one.
+
+A lesson worth keeping: "the vendor SDK is too old" and "the app is not allowed
+to open the vendor's FastRPC library" produce the same error string. The first
+was true, and the second was the one blocking.
 
 ---
 
